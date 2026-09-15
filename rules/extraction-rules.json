@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "version": 2,
-  "releasedAt": "2026-08-16",
-  "notes": "v2: added Dr./Cr. debit-credit markers used by Canara Bank style alerts; excluded YES Bank 'require consent' disbursement promos. Keyword matching is whole-word from app 2.2.1 onward.",
+  "version": 3,
+  "releasedAt": "2026-09-16",
+  "notes": "v3: added weakDirectionKeywords, the markers that prove a transaction without saying which way money moved. They stay listed under spend/receive so this file keeps working unchanged on older apps; apps that understand the field let 'credited' outrank a bare 'Txn ID', which was booking Airtel Payments Bank style credit alerts as debits. v2: added Dr./Cr. debit-credit markers used by Canara Bank style alerts; excluded YES Bank 'require consent' disbursement promos. Keyword matching is whole-word from app 2.2.1 onward.",
   "spendKeywords": [
     "debited",
     "spent",
@@ -26,6 +26,15 @@
     "refunded",
     "cashback",
     "cr."
+  ],
+  "weakDirectionKeywords": [
+    "txn",
+    "payment",
+    "transferred",
+    "sent",
+    "using",
+    "done",
+    "added"
   ],
   "otpPhrases": [
     "otp",

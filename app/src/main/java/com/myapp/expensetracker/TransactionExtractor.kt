@@ -43,6 +43,7 @@ class TransactionExtractor {
     private val categoriesMap: Map<String, List<String>> get() = rules.categories
     private val spendKeywords: List<String> get() = rules.spendKeywords
     private val receiveKeywords: List<String> get() = rules.receiveKeywords
+    private val weakDirectionKeywords: List<String> get() = rules.weakDirectionKeywords
     private val nonTransactionalPhrases: List<String> get() = rules.nonTransactionalPhrases
     private val txnDisqualifiers: List<String> get() = rules.txnDisqualifiers
 
@@ -119,11 +120,11 @@ class TransactionExtractor {
                 extractedAmount = extractAmountByRegex(body)
             }
 
-            val isSpend = isSpendMessage(lowerBody)
-            val isReceive = isReceiveMessage(lowerBody)
+            val direction = resolveDirection(lowerBody)
 
-            if (extractedAmount != null && (isSpend || isReceive)) {
-                val finalAmount = if (isSpend) -extractedAmount else extractedAmount
+            if (extractedAmount != null && direction != null) {
+                val finalAmount =
+                    if (direction == Direction.SPEND) -extractedAmount else extractedAmount
 
                 return Transaction(
                     sender = sender,
@@ -183,6 +184,47 @@ class TransactionExtractor {
 
     internal fun isReceiveMessage(lowerBody: String): Boolean =
         receiveKeywords.any { containsKeyword(lowerBody, it) }
+
+    internal enum class Direction { SPEND, RECEIVE }
+
+    /**
+     * Which way the money moved, or null when the message isn't a transaction.
+     *
+     * Plenty of messages match both lists, because banks name the counterparty's
+     * side too ("debited ... credited to beneficiary") and because markers like
+     * "txn" or "payment" appear regardless of direction. Taking spend whenever it
+     * matched booked every credit alert carrying a "Txn ID" as a debit, so a tie
+     * is resolved rather than assumed:
+     *
+     *  1. An unambiguous marker beats a [weakDirectionKeywords] one.
+     *  2. Level otherwise, the action named first wins — bank SMS leads with what
+     *     happened to *this* account and mentions the other side afterwards.
+     */
+    internal fun resolveDirection(lowerBody: String): Direction? {
+        val spendHits = spendKeywords.filter { keywordMatchesTransaction(lowerBody, it) }
+        val receiveHits = receiveKeywords.filter { containsKeyword(lowerBody, it) }
+
+        if (spendHits.isEmpty() && receiveHits.isEmpty()) return null
+        if (receiveHits.isEmpty()) return Direction.SPEND
+        if (spendHits.isEmpty()) return Direction.RECEIVE
+
+        val weak = weakDirectionKeywords.mapTo(mutableSetOf()) { it.lowercase() }
+        val strongSpend = spendHits.filterNot { it.lowercase() in weak }
+        val strongReceive = receiveHits.filterNot { it.lowercase() in weak }
+
+        if (strongSpend.isNotEmpty() && strongReceive.isEmpty()) return Direction.SPEND
+        if (strongReceive.isNotEmpty() && strongSpend.isEmpty()) return Direction.RECEIVE
+
+        // Both sides equally specific: compare within that tier only.
+        val spendAt = (strongSpend.ifEmpty { spendHits }).minOf { firstMatchIndex(lowerBody, it) }
+        val receiveAt =
+            (strongReceive.ifEmpty { receiveHits }).minOf { firstMatchIndex(lowerBody, it) }
+        return if (receiveAt < spendAt) Direction.RECEIVE else Direction.SPEND
+    }
+
+    /** Word-boundary aware, so it agrees with [containsKeyword] on what matched. */
+    private fun firstMatchIndex(body: String, keyword: String): Int =
+        keywordRegex(keyword).find(body)?.range?.first ?: Int.MAX_VALUE
 
     /**
      * Whole-word match rather than a raw substring.

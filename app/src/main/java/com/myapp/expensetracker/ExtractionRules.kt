@@ -20,6 +20,7 @@ data class ExtractionRulesFile(
     val notes: String? = null,
     val spendKeywords: List<String?>? = null,
     val receiveKeywords: List<String?>? = null,
+    val weakDirectionKeywords: List<String?>? = null,
     val otpPhrases: List<String?>? = null,
     val nonTransactionalPhrases: List<String?>? = null,
     val txnDisqualifiers: List<String?>? = null,
@@ -37,6 +38,13 @@ data class ExtractionRules(
     val releasedAt: String,
     val spendKeywords: List<String>,
     val receiveKeywords: List<String>,
+    /**
+     * Keywords that prove a transaction happened but not which way the money
+     * went ("txn", "payment", "transferred"). They stay in the spend/receive
+     * lists so a message carrying nothing else still gets a direction, but they
+     * lose to an unambiguous marker when both directions match.
+     */
+    val weakDirectionKeywords: List<String>,
     val otpPhrases: List<String>,
     val nonTransactionalPhrases: List<String>,
     val txnDisqualifiers: List<String>,
@@ -116,6 +124,9 @@ object ExtractionRulesParser {
                 releasedAt = file.releasedAt?.takeIf { it.isNotBlank() } ?: "unknown",
                 spendKeywords = spend,
                 receiveKeywords = receive,
+                // Optional: absent in v1 files, and an old app reading a newer
+                // file simply ignores it and keeps the pre-tie-break behaviour.
+                weakDirectionKeywords = file.weakDirectionKeywords.clean(),
                 otpPhrases = file.otpPhrases.clean(),
                 nonTransactionalPhrases = file.nonTransactionalPhrases.clean(),
                 txnDisqualifiers = file.txnDisqualifiers.clean(),

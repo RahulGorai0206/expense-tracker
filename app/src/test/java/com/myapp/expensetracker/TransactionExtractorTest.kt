@@ -118,6 +118,58 @@ class TransactionExtractorTest {
     }
 
     @Test
+    fun `a credit alert carrying a txn reference stays a credit`() {
+        // Airtel Payments Bank: "credited" and the weak "txn" both match, and
+        // taking spend on any match booked this as -108.00.
+        val body = "Airtel Payments Bank a/c is credited with Rs.108.00. " +
+            "Txn ID: 078271330612. Call 180023400 for help"
+        assertEquals(
+            TransactionExtractor.Direction.RECEIVE,
+            extractor.resolveDirection(body.lowercase())
+        )
+    }
+
+    @Test
+    fun `an unambiguous marker outranks a weak one in either direction`() {
+        assertEquals(
+            TransactionExtractor.Direction.RECEIVE,
+            extractor.resolveDirection("payment of rs.500 received from john")
+        )
+        assertEquals(
+            TransactionExtractor.Direction.RECEIVE,
+            extractor.resolveDirection("rs.2000 credited to your a/c, transferred by acme ltd")
+        )
+        assertEquals(
+            TransactionExtractor.Direction.SPEND,
+            extractor.resolveDirection("rs.99 debited, rs.5 added as convenience fee")
+        )
+    }
+
+    @Test
+    fun `when both sides are equally specific the first action wins`() {
+        // Both strong: the debit describes this account, the credit the payee.
+        assertEquals(
+            TransactionExtractor.Direction.SPEND,
+            extractor.resolveDirection("rs.500 debited from a/c and credited to beneficiary")
+        )
+        // Both weak.
+        assertEquals(
+            TransactionExtractor.Direction.RECEIVE,
+            extractor.resolveDirection("rs.100 added to your wallet using upi")
+        )
+    }
+
+    @Test
+    fun `a weak marker alone still gives a direction`() {
+        // Demoting "txn" must not stop a bare card alert from registering.
+        assertEquals(
+            TransactionExtractor.Direction.SPEND,
+            extractor.resolveDirection("txn of rs.450 at swiggy on card ending 1234")
+        )
+        assertNull(extractor.resolveDirection("your account statement is ready"))
+    }
+
+    @Test
     fun `txn is only a spend signal in a transactional context`() {
         // The disqualifier guard: "txn limit" must not read as spending.
         assertFalse(extractor.keywordMatchesTransaction("your txn limit is rs.50000", "txn"))

@@ -15,6 +15,7 @@ object DefaultExtractionRules {
         releasedAt = "built-in",
         spendKeywords = listOf("debited", "spent", "paid", "withdrawn", "deducted"),
         receiveKeywords = listOf("credited", "received", "refunded"),
+        weakDirectionKeywords = emptyList(),
         otpPhrases = listOf("otp", "verification code", "is your code"),
         nonTransactionalPhrases = emptyList(),
         txnDisqualifiers = listOf("limit", "alert", "password", "pin"),
