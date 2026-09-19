@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.myapp.expensetracker.LoanRepayment
 import com.myapp.expensetracker.LoanWithRepayments
 import com.myapp.expensetracker.PotContribution
 import com.myapp.expensetracker.PotSummary
@@ -64,8 +68,59 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
 
     var showAddLoan by remember { mutableStateOf(false) }
     var repayingLoan by remember { mutableStateOf<LoanWithRepayments?>(null) }
+    var deletingLoan by remember { mutableStateOf<LoanWithRepayments?>(null) }
+    var deletingRepayment by remember { mutableStateOf<LoanRepayment?>(null) }
+    var confirmDeletePerson by remember { mutableStateOf(false) }
 
     val person = state.person
+
+    if (confirmDeletePerson && person != null) {
+        val loanCount = state.loans.size
+        ConfirmDeleteDialog(
+            title = "Delete ${person.name}?",
+            message = if (loanCount == 0) {
+                "They have no loans recorded, so nothing else is removed."
+            } else {
+                "This also removes $loanCount loan${if (loanCount == 1) "" else "s"} " +
+                    "and every repayment recorded against them."
+            },
+            onDismiss = { confirmDeletePerson = false },
+            onConfirm = {
+                viewModel.deletePerson(person)
+                onBack()
+            }
+        )
+    }
+
+    deletingLoan?.let { loan ->
+        ConfirmDeleteDialog(
+            title = "Delete this loan?",
+            message = buildString {
+                append("${formatLedgerAmount(loan.loan.amount)} lent")
+                if (loan.loan.reason.isNotBlank()) append(" for ${loan.loan.reason}")
+                append(".")
+                if (loan.repayments.isNotEmpty()) {
+                    append(
+                        " Its ${loan.repayments.size} repayment" +
+                            "${if (loan.repayments.size == 1) "" else "s"} go with it."
+                    )
+                }
+            },
+            onDismiss = { deletingLoan = null },
+            onConfirm = { viewModel.deleteLoan(loan.loan.id) }
+        )
+    }
+
+    deletingRepayment?.let { repayment ->
+        ConfirmDeleteDialog(
+            title = "Delete this repayment?",
+            message = "${formatLedgerAmount(repayment.amount)} received on " +
+                "${formatLedgerDate(repayment.receivedAt)}. The loan's outstanding " +
+                "goes back up by that much.",
+            onDismiss = { deletingRepayment = null },
+            onConfirm = { viewModel.deleteRepayment(repayment.id) }
+        )
+    }
 
     if (showAddLoan && person != null) {
         AddLoanSheet(
@@ -104,6 +159,17 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    if (person != null) {
+                        IconButton(onClick = { confirmDeletePerson = true }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete person",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             )
         },
@@ -141,7 +207,8 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
                 LoanCard(
                     loan = loan,
                     onRepay = { repayingLoan = loan },
-                    onDelete = { viewModel.deleteLoan(loan.loan.id) }
+                    onDelete = { deletingLoan = loan },
+                    onDeleteRepayment = { deletingRepayment = it }
                 )
             }
 
@@ -204,7 +271,8 @@ private fun LedgerStat(label: String, value: String) {
 private fun LoanCard(
     loan: LoanWithRepayments,
     onRepay: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDeleteRepayment: (LoanRepayment) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -259,9 +327,10 @@ private fun LoanCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 formatLedgerDate(repayment.receivedAt),
                                 style = MaterialTheme.typography.bodySmall,
@@ -280,6 +349,20 @@ private fun LoanCard(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        // Compact rather than a text button: a repayment entered
+                        // twice is the most likely correction, so removing one
+                        // has to be reachable without crowding the row.
+                        IconButton(
+                            onClick = { onDeleteRepayment(repayment) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Delete repayment",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -310,8 +393,50 @@ fun PotDetailScreen(potId: Long, onBack: () -> Unit) {
     val state by remember(potId) { viewModel.potDetail(potId) }
         .collectAsState(initial = PotDetailState())
     var showAddContribution by remember { mutableStateOf(false) }
+    var deletingContribution by remember { mutableStateOf<PotContribution?>(null) }
+    var confirmDeletePot by remember { mutableStateOf(false) }
 
     val summary = state.summary
+
+    if (confirmDeletePot && summary != null) {
+        val count = state.contributions.size
+        ConfirmDeleteDialog(
+            title = "Delete ${summary.pot.name}?",
+            message = buildString {
+                if (count == 0) {
+                    append("This pot has no contributions yet.")
+                } else {
+                    append(
+                        "This removes $count contribution${if (count == 1) "" else "s"} " +
+                            "totalling ${formatLedgerAmount(summary.totalSaved)}."
+                    )
+                }
+                // The loans themselves survive (fromPotId is ON DELETE SET NULL);
+                // only the attribution is lost, and that is worth saying plainly.
+                if (summary.lentOut > 0.0) {
+                    append(
+                        " Loans drawn from it are kept, but stop being linked to " +
+                            "any pot."
+                    )
+                }
+            },
+            onDismiss = { confirmDeletePot = false },
+            onConfirm = {
+                viewModel.deletePot(summary.pot)
+                onBack()
+            }
+        )
+    }
+
+    deletingContribution?.let { contribution ->
+        ConfirmDeleteDialog(
+            title = "Delete this contribution?",
+            message = "${formatLedgerAmount(contribution.amount)} added on " +
+                "${formatLedgerDate(contribution.addedAt)}.",
+            onDismiss = { deletingContribution = null },
+            onConfirm = { viewModel.deleteContribution(contribution.id) }
+        )
+    }
 
     if (showAddContribution && summary != null) {
         AddContributionSheet(
@@ -332,6 +457,17 @@ fun PotDetailScreen(potId: Long, onBack: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (summary != null) {
+                        IconButton(onClick = { confirmDeletePot = true }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete savings pot",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             )
@@ -367,7 +503,7 @@ fun PotDetailScreen(potId: Long, onBack: () -> Unit) {
             items(state.contributions, key = { it.id }) { contribution ->
                 ContributionRow(
                     contribution = contribution,
-                    onDelete = { viewModel.deleteContribution(contribution.id) }
+                    onDelete = { deletingContribution = contribution }
                 )
             }
 

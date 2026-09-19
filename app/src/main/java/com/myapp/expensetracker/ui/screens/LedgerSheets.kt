@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +41,43 @@ import com.myapp.expensetracker.SavingsPot
  * button stays disabled until the entry would actually be valid — a blank or
  * zero amount silently recorded would corrupt a balance the user is relying on.
  */
+
+/**
+ * Confirmation for a delete that cannot be undone.
+ *
+ * Every ledger row is a financial record the user is relying on to be right, and
+ * several of them cascade — removing a person takes their loans and repayments
+ * with it. A mis-tap silently wiping a year of records is worse than one extra
+ * tap, so nothing here deletes without asking.
+ */
+@Composable
+fun ConfirmDeleteDialog(
+    title: String,
+    message: String,
+    confirmLabel: String = "Delete",
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm()
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
 
 /** True when [text] parses to a positive amount. */
 private fun parsedAmount(text: String): Double? =
