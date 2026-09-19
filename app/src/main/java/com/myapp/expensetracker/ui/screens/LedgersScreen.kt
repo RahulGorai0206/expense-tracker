@@ -47,6 +47,7 @@ import com.myapp.expensetracker.PersonBalance
 import com.myapp.expensetracker.PotSummary
 import com.myapp.expensetracker.ui.components.EmptyState
 import com.myapp.expensetracker.viewmodel.LedgerViewModel
+import com.myapp.expensetracker.viewmodel.SplitViewModel
 import org.koin.androidx.compose.koinViewModel
 import java.util.Locale
 
@@ -55,22 +56,41 @@ internal fun formatLedgerAmount(amount: Double): String =
     String.format(Locale.getDefault(), "₹%,.2f", amount)
 
 /**
- * The two hand-kept ledgers: money lent out, and money set aside.
+ * Every hand-kept record in the app: shared costs, money lent out, and money
+ * set aside.
  *
- * Deliberately separate from the transaction list — nothing here comes from
- * SMS, and nothing here counts toward spending analytics.
+ * These three are grouped because of where their data comes from, not because
+ * they are about people — Home, History and Analytics are all views of the
+ * automatic SMS stream, while everything here is typed in by the user. Splits
+ * have never been linked to detected transactions, so they belong on this side
+ * of that line too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LedgerScreen(
+fun LedgersScreen(
+    onEventClick: (Long) -> Unit,
     onPersonClick: (Long) -> Unit,
     onPotClick: (Long) -> Unit
 ) {
     val viewModel: LedgerViewModel = koinViewModel()
+    val splitViewModel: SplitViewModel = koinViewModel()
     val state by viewModel.state.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showCreateEvent by remember { mutableStateOf(false) }
     var showAddPerson by remember { mutableStateOf(false) }
     var showAddPot by remember { mutableStateOf(false) }
+
+    if (showCreateEvent) {
+        CreateSplitEventDialog(
+            onDismiss = { showCreateEvent = false },
+            onCreate = { name ->
+                splitViewModel.createEvent(name) { eventId ->
+                    showCreateEvent = false
+                    onEventClick(eventId)
+                }
+            }
+        )
+    }
 
     if (showAddPerson) {
         AddPersonSheet(
@@ -100,13 +120,13 @@ fun LedgerScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 Text(
-                    "Ledger",
+                    "Ledgers",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    "Money lent out, and money set aside.",
+                    "Shared costs, money lent out, and money set aside.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -119,39 +139,46 @@ fun LedgerScreen(
                 containerColor = MaterialTheme.colorScheme.background,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp))
             ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Lending") }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Savings") }
-                )
+                LedgerTabs.entries.forEachIndexed { index, tab ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(tab.label) }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            when (selectedTab) {
-                0 -> LendingTab(
-                    people = state.people,
-                    totalOutstanding = state.totalOutstanding,
-                    onPersonClick = onPersonClick,
-                    onAddPerson = { showAddPerson = true }
+            when (LedgerTabs.entries[selectedTab]) {
+                LedgerTabs.SPLIT -> SplitTabContent(
+                    onEventClick = onEventClick,
+                    onCreateEvent = { showCreateEvent = true }
                 )
 
-                else -> SavingsTab(
+                LedgerTabs.LENDING -> LendingTab(
+                    people = state.people,
+                    totalOutstanding = state.totalOutstanding,
+                    onPersonClick = onPersonClick
+                )
+
+                LedgerTabs.SAVINGS -> SavingsTab(
                     pots = state.pots,
                     totalSaved = state.totalSaved,
-                    onPotClick = onPotClick,
-                    onAddPot = { showAddPot = true }
+                    onPotClick = onPotClick
                 )
             }
         }
 
+        // One button, three meanings — the tab decides what "add" creates.
         LargeFloatingActionButton(
-            onClick = { if (selectedTab == 0) showAddPerson = true else showAddPot = true },
+            onClick = {
+                when (LedgerTabs.entries[selectedTab]) {
+                    LedgerTabs.SPLIT -> showCreateEvent = true
+                    LedgerTabs.LENDING -> showAddPerson = true
+                    LedgerTabs.SAVINGS -> showAddPot = true
+                }
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
@@ -162,19 +189,25 @@ fun LedgerScreen(
         ) {
             Icon(
                 Icons.Default.Add,
-                contentDescription = if (selectedTab == 0) "Add person" else "Add savings pot",
+                contentDescription = LedgerTabs.entries[selectedTab].addLabel,
                 modifier = Modifier.size(32.dp)
             )
         }
     }
 }
 
+/** The three hand-kept ledgers, in tab order. */
+private enum class LedgerTabs(val label: String, val addLabel: String) {
+    SPLIT("Split", "Create event"),
+    LENDING("Lending", "Add person"),
+    SAVINGS("Savings", "Add savings pot")
+}
+
 @Composable
 private fun LendingTab(
     people: List<PersonBalance>,
     totalOutstanding: Double,
-    onPersonClick: (Long) -> Unit,
-    onAddPerson: () -> Unit
+    onPersonClick: (Long) -> Unit
 ) {
     if (people.isEmpty()) {
         EmptyState(
@@ -214,8 +247,7 @@ private fun LendingTab(
 private fun SavingsTab(
     pots: List<PotSummary>,
     totalSaved: Double,
-    onPotClick: (Long) -> Unit,
-    onAddPot: () -> Unit
+    onPotClick: (Long) -> Unit
 ) {
     if (pots.isEmpty()) {
         EmptyState(

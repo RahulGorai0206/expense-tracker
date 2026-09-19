@@ -313,7 +313,7 @@ private fun MainAppContent(
     onFollowSystemThemeChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(pageCount = { 6 })
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -451,7 +451,7 @@ private fun MainAppContent(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // 1, not 2: this composed up to six tabs at once, including
+                    // 1, not 2: this composed up to five tabs at once, including
                     // the two largest screens in the app. One neighbour is
                     // enough to keep swipes smooth.
                     beyondViewportPageCount = 1
@@ -469,20 +469,20 @@ private fun MainAppContent(
                             },
                             onSettingsClick = {
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(5, animationSpec = tween(400))
+                                    pagerState.animateScrollToPage(4, animationSpec = tween(400))
                                 }
                             }
                         )
 
                         1 -> TransactionScreen(onTransactionClick = { selectedTransaction = it })
-                        2 -> SplitScreen(onEventClick = { selectedSplitEventId = it })
-                        3 -> LedgerScreen(
+                        2 -> LedgersScreen(
+                            onEventClick = { selectedSplitEventId = it },
                             onPersonClick = { selectedPersonId = it },
                             onPotClick = { selectedPotId = it }
                         )
 
-                        4 -> AnalyticsScreen()
-                        5 -> SettingsScreen(
+                        3 -> AnalyticsScreen()
+                        4 -> SettingsScreen(
                             isDarkTheme = isDarkTheme,
                             onDarkThemeChange = onDarkThemeChange,
                             followSystemTheme = followSystemTheme,
@@ -525,8 +525,8 @@ private fun MainAppContent(
                         }
                         NavItem(
                             pagerState.targetPage == 2,
-                            Icons.Default.Groups,
-                            "Split"
+                            Icons.Default.AccountBalanceWallet,
+                            "Ledgers"
                         ) {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(2, animationSpec = tween(400))
@@ -534,8 +534,8 @@ private fun MainAppContent(
                         }
                         NavItem(
                             pagerState.targetPage == 3,
-                            Icons.Default.AccountBalanceWallet,
-                            "Ledger"
+                            Icons.Default.Analytics,
+                            "Analytics"
                         ) {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(3, animationSpec = tween(400))
@@ -543,20 +543,11 @@ private fun MainAppContent(
                         }
                         NavItem(
                             pagerState.targetPage == 4,
-                            Icons.Default.Analytics,
-                            "Analytics"
-                        ) {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(4, animationSpec = tween(400))
-                            }
-                        }
-                        NavItem(
-                            pagerState.targetPage == 5,
                             Icons.Default.Settings,
                             "Settings"
                         ) {
                             coroutineScope.launch {
-                                pagerState.animateScrollToPage(5, animationSpec = tween(400))
+                                pagerState.animateScrollToPage(4, animationSpec = tween(400))
                             }
                         }
                     }
@@ -671,7 +662,7 @@ private fun MainAppContent(
 fun RowScope.NavItem(selected: Boolean, icon: ImageVector, label: String, onClick: () -> Unit) {
     val haptics = rememberHaptics()
 
-    // Wrapped once here so all six tabs feel identical. Re-tapping the current
+    // Wrapped once here so all five tabs feel identical. Re-tapping the current
     // tab stays silent — nothing changed, so there is nothing to confirm.
     val onNavClick: () -> Unit = {
         if (!selected) haptics.tick()

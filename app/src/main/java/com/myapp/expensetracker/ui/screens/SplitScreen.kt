@@ -132,88 +132,37 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
+/**
+ * The split event list, as one tab of [LedgersScreen].
+ *
+ * The screen heading, the floating action button and the create-event sheet all
+ * live on the parent now, because the three ledger tabs share them — only the
+ * list itself differs between tabs.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SplitScreen(onEventClick: (Long) -> Unit) {
+fun SplitTabContent(
+    onEventClick: (Long) -> Unit,
+    onCreateEvent: () -> Unit
+) {
     val viewModel: SplitViewModel = koinViewModel()
     val events by viewModel.events.collectAsState()
-    var showCreateDialog by remember { mutableStateOf(false) }
 
-    if (showCreateDialog) {
-        CreateSplitEventDialog(
-            onDismiss = { showCreateDialog = false },
-            onCreate = { name ->
-                viewModel.createEvent(name) { eventId ->
-                    showCreateDialog = false
-                    onEventClick(eventId)
-                }
-            }
-        )
+    if (events.isEmpty()) {
+        SplitEmptyState(onCreate = onCreateEvent)
+        return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Split",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        "Events, shared expenses, and who owes whom.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (events.isEmpty()) {
-                SplitEmptyState(onCreate = { showCreateDialog = true })
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(events, key = { it.id }) { event ->
-                        Box(modifier = Modifier.animateItem()) {
-                            SplitEventCard(event = event, onClick = { onEventClick(event.id) })
-                        }
-                    }
-                    item { Spacer(modifier = Modifier.height(110.dp)) }
-                }
+        items(events, key = { it.id }) { event ->
+            Box(modifier = Modifier.animateItem()) {
+                SplitEventCard(event = event, onClick = { onEventClick(event.id) })
             }
         }
-
-        LargeFloatingActionButton(
-            onClick = { showCreateDialog = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(bottom = 104.dp),
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = RoundedCornerShape(24.dp)
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = "Create event",
-                modifier = Modifier.size(32.dp)
-            )
-        }
+        item { Spacer(modifier = Modifier.height(110.dp)) }
     }
 }
 
@@ -513,7 +462,7 @@ private fun SplitEventCard(event: SplitEvent, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateSplitEventDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+internal fun CreateSplitEventDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focusRequester = remember { FocusRequester() }
