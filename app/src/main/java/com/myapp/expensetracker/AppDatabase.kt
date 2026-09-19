@@ -23,9 +23,14 @@ import java.util.Locale
         SplitExpense::class,
         SplitShare::class,
         SplitPayment::class,
-        PendingTransaction::class
+        PendingTransaction::class,
+        Person::class,
+        Loan::class,
+        LoanRepayment::class,
+        SavingsPot::class,
+        PotContribution::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun monthlyBudgetDao(): MonthlyBudgetDao
     abstract fun splitDao(): SplitDao
     abstract fun pendingTransactionDao(): PendingTransactionDao
+    abstract fun ledgerDao(): LedgerDao
 
     companion object {
         @Volatile
@@ -180,6 +186,82 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 11 → 12: the hand-kept lending and savings ledgers.
+         *
+         * Purely additive — five new tables, nothing on `transactions` touched,
+         * so an upgrade cannot disturb existing data.
+         */
+        private val migration11to12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS people (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        note TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS savings_pots (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        targetAmount REAL,
+                        note TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                // Declared after savings_pots: the fromPotId foreign key needs
+                // its parent table to already exist.
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS loans (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        personId INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        reason TEXT NOT NULL,
+                        lentAt INTEGER NOT NULL,
+                        fromPotId INTEGER,
+                        FOREIGN KEY(personId) REFERENCES people(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(fromPotId) REFERENCES savings_pots(id) ON UPDATE NO ACTION ON DELETE SET NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_loans_personId ON loans(personId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_loans_fromPotId ON loans(fromPotId)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS loan_repayments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        loanId INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        receivedAt INTEGER NOT NULL,
+                        note TEXT NOT NULL,
+                        FOREIGN KEY(loanId) REFERENCES loans(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_loan_repayments_loanId ON loan_repayments(loanId)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pot_contributions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        potId INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        addedAt INTEGER NOT NULL,
+                        note TEXT NOT NULL,
+                        FOREIGN KEY(potId) REFERENCES savings_pots(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pot_contributions_potId ON pot_contributions(potId)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -191,7 +273,8 @@ abstract class AppDatabase : RoomDatabase() {
                         createMigration7to8(context),
                         migration8to9,
                         migration9to10,
-                        migration10to11
+                        migration10to11,
+                        migration11to12
                     )
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

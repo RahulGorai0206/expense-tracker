@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Kotlin-2.3.20-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin"/>
   <img src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose"/>
   <img src="https://img.shields.io/badge/ML%20Kit-Entity%20Extraction-34A853?logo=google&logoColor=white" alt="ML Kit"/>
-  <img src="https://img.shields.io/badge/Room-2.8.4%20(schema%20v11)-orange?logo=android" alt="Room"/>
+  <img src="https://img.shields.io/badge/Room-2.8.4%20(schema%20v12)-orange?logo=android" alt="Room"/>
   <img src="https://img.shields.io/badge/Min%20SDK-31-green?logo=android" alt="Min SDK"/>
   <img src="https://img.shields.io/badge/Target%20SDK-36-blue?logo=android" alt="Target SDK"/>
 </p>
@@ -88,7 +88,7 @@ dark/light theme system.
 | 🛠️ **AI Model Management**       | Dedicated section to download, repair, or delete the 1.2GB Gemma model with real-time percentage-based progress tracking                                                                          |
 | 🌙 **Premium Theme System**       | Follow system theme or manually toggle Premium Dark Mode (deep blacks)                                                                                                                            |
 | 🔄 **Intelligent Navigation**     | Refined back-gesture logic: Detail → Previous Page, History/Settings → Home, Home → Exit                                                                                                          |
-| 🔄 **Offline-First Architecture** | Local Room DB as source of truth (schema v11); background cloud sync with retry for failed uploads                                                                                                        |
+| 🔄 **Offline-First Architecture** | Local Room DB as source of truth (schema v12); background cloud sync with retry for failed uploads                                                                                                        |
 | 📤 **Smart Transaction Sharing**  | Premium receipt format with customization options: Toggle Screenshot, Merchant, Date, Location, and Message                                                                                       |
 | 🔁 **Automatic Update Checker**   | Checks GitHub Releases daily at 6 PM IST; detects new tags *and* same-tag re-releases via commit-hash comparison; notifies user and surfaces a one-tap download link in Settings                  |
 | 👥 **Split Expenses**             | Shared events with members, even/amount/percentage splits, net balances, settlement suggestions and a shareable summary image                                                                        |
@@ -118,7 +118,7 @@ graph TB
     end
 
     subgraph Data Layer
-        DB["Room Database<br/>(SQLite v11)"]
+        DB["Room Database<br/>(SQLite v12)"]
         DAO["TransactionDao<br/>(Analytics & Sync)"]
         BUDGET_DAO["MonthlyBudgetDao<br/>(Historical Budgets)"]
         PREFS["SharedPreferences<br/>(Settings & Toggles)"]
@@ -250,7 +250,7 @@ stateDiagram-v2
     NotificationShown --> Denied: User taps "Deny"
     NotificationShown --> AutoAccepted: 30-second timeout
 
-    Accepted --> SavedLocally: Insert to Room DB (v11)
+    Accepted --> SavedLocally: Insert to Room DB (v12)
     AutoAccepted --> SavedLocally: Insert to Room DB (status=Auto-Cleared)
 
     SavedLocally --> CloudSync: Background sync to Sheets

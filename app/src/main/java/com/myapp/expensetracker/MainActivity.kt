@@ -313,7 +313,7 @@ private fun MainAppContent(
     onFollowSystemThemeChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
-    val pagerState = rememberPagerState(pageCount = { 5 })
+    val pagerState = rememberPagerState(pageCount = { 6 })
     val coroutineScope = rememberCoroutineScope()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -333,6 +333,8 @@ private fun MainAppContent(
 
     var selectedTransaction by remember { mutableStateOf<Transaction?>(null) }
     var selectedSplitEventId by remember { mutableStateOf<Long?>(null) }
+    var selectedPersonId by remember { mutableStateOf<Long?>(null) }
+    var selectedPotId by remember { mutableStateOf<Long?>(null) }
 
     // Keep reference to the last selected transaction for exit animation
     var lastSelectedTransaction by remember { mutableStateOf<Transaction?>(null) }
@@ -343,22 +345,34 @@ private fun MainAppContent(
     if (selectedSplitEventId != null) {
         lastSelectedSplitEventId = selectedSplitEventId
     }
+    var lastSelectedPersonId by remember { mutableStateOf<Long?>(null) }
+    if (selectedPersonId != null) {
+        lastSelectedPersonId = selectedPersonId
+    }
+    var lastSelectedPotId by remember { mutableStateOf<Long?>(null) }
+    if (selectedPotId != null) {
+        lastSelectedPotId = selectedPotId
+    }
 
     // ── Predictive back ─────────────────────────────────────────────
     // Dismissing a detail screen follows the finger: the overlay shrinks and
     // slides as the gesture progresses, so the user can see where back leads
     // and abandon it. Committing the gesture dismisses; cancelling springs back.
-    val detailVisible = selectedTransaction != null || selectedSplitEventId != null
+    val detailVisible = selectedTransaction != null || selectedSplitEventId != null ||
+        selectedPersonId != null || selectedPotId != null
     val backProgress = remember { Animatable(0f) }
 
     PredictiveBackHandler(enabled = detailVisible) { events ->
         try {
             events.collect { event -> backProgress.snapTo(event.progress) }
             // Flow completed without cancellation — the gesture was committed.
-            if (selectedTransaction != null) {
-                selectedTransaction = null
-            } else {
-                selectedSplitEventId = null
+            // Only one detail is ever open at a time; checked in the order they
+            // can be opened so the innermost always wins.
+            when {
+                selectedTransaction != null -> selectedTransaction = null
+                selectedSplitEventId != null -> selectedSplitEventId = null
+                selectedPersonId != null -> selectedPersonId = null
+                else -> selectedPotId = null
             }
             backProgress.snapTo(0f)
         } catch (cancelled: CancellationException) {
@@ -437,7 +451,7 @@ private fun MainAppContent(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // 1, not 2: this composed up to five tabs at once, including
+                    // 1, not 2: this composed up to six tabs at once, including
                     // the two largest screens in the app. One neighbour is
                     // enough to keep swipes smooth.
                     beyondViewportPageCount = 1
@@ -455,15 +469,20 @@ private fun MainAppContent(
                             },
                             onSettingsClick = {
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(4, animationSpec = tween(400))
+                                    pagerState.animateScrollToPage(5, animationSpec = tween(400))
                                 }
                             }
                         )
 
                         1 -> TransactionScreen(onTransactionClick = { selectedTransaction = it })
                         2 -> SplitScreen(onEventClick = { selectedSplitEventId = it })
-                        3 -> AnalyticsScreen()
-                        4 -> SettingsScreen(
+                        3 -> LedgerScreen(
+                            onPersonClick = { selectedPersonId = it },
+                            onPotClick = { selectedPotId = it }
+                        )
+
+                        4 -> AnalyticsScreen()
+                        5 -> SettingsScreen(
                             isDarkTheme = isDarkTheme,
                             onDarkThemeChange = onDarkThemeChange,
                             followSystemTheme = followSystemTheme,
@@ -515,8 +534,8 @@ private fun MainAppContent(
                         }
                         NavItem(
                             pagerState.targetPage == 3,
-                            Icons.Default.Analytics,
-                            "Analytics"
+                            Icons.Default.AccountBalanceWallet,
+                            "Ledger"
                         ) {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(3, animationSpec = tween(400))
@@ -524,11 +543,20 @@ private fun MainAppContent(
                         }
                         NavItem(
                             pagerState.targetPage == 4,
+                            Icons.Default.Analytics,
+                            "Analytics"
+                        ) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(4, animationSpec = tween(400))
+                            }
+                        }
+                        NavItem(
+                            pagerState.targetPage == 5,
                             Icons.Default.Settings,
                             "Settings"
                         ) {
                             coroutineScope.launch {
-                                pagerState.animateScrollToPage(4, animationSpec = tween(400))
+                                pagerState.animateScrollToPage(5, animationSpec = tween(400))
                             }
                         }
                     }
@@ -587,6 +615,54 @@ private fun MainAppContent(
                     )
                 }
             }
+
+            AnimatedVisibility(
+                visible = selectedPersonId != null,
+                modifier = Modifier.graphicsLayer {
+                    val progress = backProgress.value
+                    translationX = progress * size.width * 0.18f
+                    scaleX = 1f - progress * 0.08f
+                    scaleY = 1f - progress * 0.08f
+                    alpha = 1f - progress * 0.15f
+                },
+                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
+                    animationSpec = tween(500)
+                ),
+                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
+                    animationSpec = tween(500)
+                )
+            ) {
+                lastSelectedPersonId?.let { personId ->
+                    PersonDetailScreen(
+                        personId = personId,
+                        onBack = { selectedPersonId = null }
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = selectedPotId != null,
+                modifier = Modifier.graphicsLayer {
+                    val progress = backProgress.value
+                    translationX = progress * size.width * 0.18f
+                    scaleX = 1f - progress * 0.08f
+                    scaleY = 1f - progress * 0.08f
+                    alpha = 1f - progress * 0.15f
+                },
+                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
+                    animationSpec = tween(500)
+                ),
+                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
+                    animationSpec = tween(500)
+                )
+            ) {
+                lastSelectedPotId?.let { potId ->
+                    PotDetailScreen(
+                        potId = potId,
+                        onBack = { selectedPotId = null }
+                    )
+                }
+            }
         }
     }
 }
@@ -595,7 +671,7 @@ private fun MainAppContent(
 fun RowScope.NavItem(selected: Boolean, icon: ImageVector, label: String, onClick: () -> Unit) {
     val haptics = rememberHaptics()
 
-    // Wrapped once here so all five tabs feel identical. Re-tapping the current
+    // Wrapped once here so all six tabs feel identical. Re-tapping the current
     // tab stays silent — nothing changed, so there is nothing to confirm.
     val onNavClick: () -> Unit = {
         if (!selected) haptics.tick()

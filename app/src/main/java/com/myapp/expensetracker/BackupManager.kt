@@ -42,6 +42,10 @@ data class ExpenseBackupFile(
     val scope: String? = null,
     val transactions: List<TransactionBackup>? = null,
     val splitEvents: List<SplitEventBackup>? = null,
+    // Added after the first release of this format. Null in every older backup,
+    // which restores exactly as it always did.
+    val savingsPots: List<SavingsPotBackup>? = null,
+    val people: List<PersonBackup>? = null,
     val budgets: List<MonthlyBudgetBackup>? = null,
     val settings: CloudSettingsBackup? = null
 )
@@ -108,6 +112,48 @@ data class SplitPaymentBackup(
     val createdAt: Long? = null
 )
 
+/**
+ * A savings pot and everything put into it. [localId] lets a loan say which pot
+ * it was drawn from after both have been reinserted with fresh ids.
+ */
+data class SavingsPotBackup(
+    val localId: Long? = null,
+    val name: String? = null,
+    val targetAmount: Double? = null,
+    val note: String? = null,
+    val createdAt: Long? = null,
+    val contributions: List<PotContributionBackup>? = null
+)
+
+data class PotContributionBackup(
+    val amount: Double? = null,
+    val addedAt: Long? = null,
+    val note: String? = null
+)
+
+/** One person, with every loan and repayment nested underneath. */
+data class PersonBackup(
+    val name: String? = null,
+    val note: String? = null,
+    val createdAt: Long? = null,
+    val loans: List<LoanBackup>? = null
+)
+
+data class LoanBackup(
+    val amount: Double? = null,
+    val reason: String? = null,
+    val lentAt: Long? = null,
+    /** References [SavingsPotBackup.localId]; null when not drawn from a pot. */
+    val fromPotLocalId: Long? = null,
+    val repayments: List<LoanRepaymentBackup>? = null
+)
+
+data class LoanRepaymentBackup(
+    val amount: Double? = null,
+    val receivedAt: Long? = null,
+    val note: String? = null
+)
+
 /** What an import actually changed. Surfaced to the user verbatim. */
 data class ImportSummary(
     val scope: BackupScope,
@@ -115,6 +161,8 @@ data class ImportSummary(
     val transactionsSkipped: Int = 0,
     val splitEventsAdded: Int = 0,
     val splitEventsSkipped: Int = 0,
+    val peopleAdded: Int = 0,
+    val potsAdded: Int = 0,
     val budgetsAdded: Int = 0,
     val settingsApplied: Boolean = false
 ) {
@@ -123,6 +171,10 @@ data class ImportSummary(
         if (transactionsSkipped > 0) append(" ($transactionsSkipped already present)")
         append(", $splitEventsAdded split event${if (splitEventsAdded == 1) "" else "s"}")
         if (splitEventsSkipped > 0) append(" ($splitEventsSkipped already present)")
+        // Only mentioned when there is something to mention, so a user who has
+        // never opened the ledger doesn't see two permanent zeroes.
+        if (peopleAdded > 0) append(", $peopleAdded ${if (peopleAdded == 1) "person" else "people"}")
+        if (potsAdded > 0) append(", $potsAdded savings pot${if (potsAdded == 1) "" else "s"}")
         if (budgetsAdded > 0) append(", $budgetsAdded budget${if (budgetsAdded == 1) "" else "s"}")
         if (settingsApplied) append(", settings restored")
         append(" imported.")
@@ -202,6 +254,46 @@ object BackupManager {
                 )
             }
 
+            val savingsPots = db.ledgerDao().getAllPots().map { pot ->
+                SavingsPotBackup(
+                    localId = pot.id,
+                    name = pot.name,
+                    targetAmount = pot.targetAmount,
+                    note = pot.note,
+                    createdAt = pot.createdAt,
+                    contributions = db.ledgerDao().getContributionsForPot(pot.id).map { c ->
+                        PotContributionBackup(
+                            amount = c.amount,
+                            addedAt = c.addedAt,
+                            note = c.note
+                        )
+                    }
+                )
+            }
+
+            val people = db.ledgerDao().getAllPeople().map { person ->
+                PersonBackup(
+                    name = person.name,
+                    note = person.note,
+                    createdAt = person.createdAt,
+                    loans = db.ledgerDao().getLoansForPerson(person.id).map { loan ->
+                        LoanBackup(
+                            amount = loan.amount,
+                            reason = loan.reason,
+                            lentAt = loan.lentAt,
+                            fromPotLocalId = loan.fromPotId,
+                            repayments = db.ledgerDao().getRepaymentsForLoan(loan.id).map { r ->
+                                LoanRepaymentBackup(
+                                    amount = r.amount,
+                                    receivedAt = r.receivedAt,
+                                    note = r.note
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+
             ExpenseBackupFile(
                 format = FORMAT,
                 schemaVersion = SCHEMA_VERSION,
@@ -210,6 +302,8 @@ object BackupManager {
                 scope = scope.id,
                 transactions = transactions.map { it.toBackup() },
                 splitEvents = splitEvents,
+                savingsPots = savingsPots,
+                people = people,
                 budgets = if (scope == BackupScope.FULL) {
                     db.monthlyBudgetDao().getAllBudgets().map { it.toBackup() }
                 } else null,
@@ -293,6 +387,8 @@ object BackupManager {
         var transactionsSkipped = 0
         var splitEventsAdded = 0
         var splitEventsSkipped = 0
+        var peopleAdded = 0
+        var potsAdded = 0
         var budgetsAdded = 0
 
         db.withTransaction {
@@ -400,6 +496,92 @@ object BackupManager {
                 splitEventsAdded++
             }
 
+            // ── Savings pots ────────────────────────────────────────────────
+            // Imported before people, so a loan can be reattached to the pot it
+            // was drawn from once both have fresh row ids.
+            val existingPotKeys = db.ledgerDao().getAllPots()
+                .map { ledgerDedupKey(it.name, it.createdAt) }
+                .toMutableSet()
+            val potIdByLocalId = mutableMapOf<Long, Long>()
+
+            backup.savingsPots.orEmpty().forEach { dto ->
+                val name = dto.name?.trim().orEmpty()
+                if (name.isBlank()) return@forEach
+                val createdAt = dto.createdAt ?: System.currentTimeMillis()
+                if (!existingPotKeys.add(ledgerDedupKey(name, createdAt))) return@forEach
+
+                val newPotId = db.ledgerDao().insertPot(
+                    SavingsPot(
+                        name = name,
+                        targetAmount = dto.targetAmount,
+                        note = dto.note.orEmpty(),
+                        createdAt = createdAt
+                    )
+                )
+                dto.localId?.let { potIdByLocalId[it] = newPotId }
+
+                dto.contributions.orEmpty().forEach { c ->
+                    val amount = c.amount ?: return@forEach
+                    db.ledgerDao().insertContribution(
+                        PotContribution(
+                            potId = newPotId,
+                            amount = amount,
+                            addedAt = c.addedAt ?: createdAt,
+                            note = c.note.orEmpty()
+                        )
+                    )
+                }
+                potsAdded++
+            }
+
+            // ── People, loans and repayments ────────────────────────────────
+            val existingPersonKeys = db.ledgerDao().getAllPeople()
+                .map { ledgerDedupKey(it.name, it.createdAt) }
+                .toMutableSet()
+
+            backup.people.orEmpty().forEach { dto ->
+                val name = dto.name?.trim().orEmpty()
+                if (name.isBlank()) return@forEach
+                val createdAt = dto.createdAt ?: System.currentTimeMillis()
+                if (!existingPersonKeys.add(ledgerDedupKey(name, createdAt))) return@forEach
+
+                val newPersonId = db.ledgerDao().insertPerson(
+                    Person(
+                        name = name,
+                        note = dto.note.orEmpty(),
+                        createdAt = createdAt
+                    )
+                )
+
+                dto.loans.orEmpty().forEach { loanDto ->
+                    val amount = loanDto.amount ?: return@forEach
+                    val lentAt = loanDto.lentAt ?: createdAt
+                    val newLoanId = db.ledgerDao().insertLoan(
+                        Loan(
+                            personId = newPersonId,
+                            amount = amount,
+                            reason = loanDto.reason.orEmpty(),
+                            lentAt = lentAt,
+                            // Drops to null when the pot wasn't in this backup;
+                            // the loan is still worth keeping without it.
+                            fromPotId = loanDto.fromPotLocalId?.let { potIdByLocalId[it] }
+                        )
+                    )
+                    loanDto.repayments.orEmpty().forEach { r ->
+                        val repaid = r.amount ?: return@forEach
+                        db.ledgerDao().insertRepayment(
+                            LoanRepayment(
+                                loanId = newLoanId,
+                                amount = repaid,
+                                receivedAt = r.receivedAt ?: lentAt,
+                                note = r.note.orEmpty()
+                            )
+                        )
+                    }
+                }
+                peopleAdded++
+            }
+
             // ── Budget history (full backups only) ──────────────────────────
             backup.budgets.orEmpty().forEach { dto ->
                 val entity = dto.toEntity() ?: return@forEach
@@ -424,6 +606,8 @@ object BackupManager {
                 transactionsSkipped = transactionsSkipped,
                 splitEventsAdded = splitEventsAdded,
                 splitEventsSkipped = splitEventsSkipped,
+                peopleAdded = peopleAdded,
+                potsAdded = potsAdded,
                 budgetsAdded = budgetsAdded,
                 settingsApplied = settings != null
             )
@@ -507,3 +691,10 @@ internal fun Transaction.dedupKey(): String = "$date|$amount|$bodyHash"
 internal fun splitEventDedupKey(name: String, createdAt: Long): String = "$name|$createdAt"
 
 internal fun SplitEvent.dedupKey(): String = splitEventDedupKey(name, createdAt)
+
+/**
+ * Identity for a person or a savings pot on re-import. Name alone would collide
+ * for two relatives who share one, so creation time is folded in — the same
+ * shape [splitEventDedupKey] uses.
+ */
+internal fun ledgerDedupKey(name: String, createdAt: Long): String = "$name|$createdAt"

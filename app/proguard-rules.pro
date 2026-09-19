@@ -48,6 +48,11 @@
 -keep class com.myapp.expensetracker.SplitExpenseBackup { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.SplitShareBackup { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.SplitPaymentBackup { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.SavingsPotBackup { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.PotContributionBackup { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.PersonBackup { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.LoanBackup { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.LoanRepaymentBackup { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.ExtractionRulesFile { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.GitHubRelease { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.GitHubTagRef { <fields>; <init>(...); }
@@ -65,6 +70,11 @@
 -keep class com.myapp.expensetracker.SplitExpense { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.SplitShare { <fields>; <init>(...); }
 -keep class com.myapp.expensetracker.SplitPayment { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.Person { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.Loan { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.LoanRepayment { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.SavingsPot { <fields>; <init>(...); }
+-keep class com.myapp.expensetracker.PotContribution { <fields>; <init>(...); }
 
 # ── Retrofit / OkHttp ───────────────────────────────────────────────────────
 -keep,allowobfuscation,allowshrinking interface retrofit2.Call
