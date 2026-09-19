@@ -195,7 +195,7 @@ class UpdateCheckWorker(
         )
 
         val notification = NotificationCompat.Builder(applicationContext, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Update Available")
             .setContentText("A new version ($version) of Expense Tracker is available.")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

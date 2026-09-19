@@ -109,7 +109,7 @@ class FeatureNudgeWorker(
         )
 
         val notification = NotificationCompat.Builder(applicationContext, candidate.channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(candidate.title)
             .setContentText(candidate.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(candidate.text))

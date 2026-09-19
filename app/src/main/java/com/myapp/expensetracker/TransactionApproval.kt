@@ -222,7 +222,7 @@ object TransactionApproval {
         val triggerAt = System.currentTimeMillis() + TIMEOUT_MS
 
         val notification = androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("New Transaction: ₹${"%,.2f".format(transaction.amount)}")
             .setContentText("From ${transaction.sender}")
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Monochrome layer for Android 13+ themed icons. The launcher discards colour
+  and tints the alpha channel, so this is the mark in one flat value.
+
+  It survives flattening because the arrow is separated from the bubble by real
+  negative space rather than by a colour difference — which is the reason the
+  bubble is stroked rather than filled.
+
+  Same scale as the colour foreground, so switching themed icons on and off
+  does not change how big the icon looks on the home screen.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.80"
+        android:scaleY="0.80">
+
+        <path
+            android:pathData="M41,24 L67,24 A13,13 0 0 1 80,37 L80,53 A13,13 0 0 1 67,66 L41,66 L28,79 L28,37 A13,13 0 0 1 41,24 Z"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="8.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M54,33 L54,56"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M44.5,46.5 L54,56 L63.5,46.5"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="6.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar icon.
+
+  Android draws a notification icon as a silhouette — colour is thrown away and
+  only alpha is kept — so this is the mark in one flat white. Pointing the
+  notifications at the launcher foreground instead, which is what they used to
+  do, wastes the gradient and hands the status bar a 108dp drawable to squeeze
+  into 24.
+
+  Scaled up about the centre because there is no adaptive-icon mask to keep
+  clear of here, and the mark needs every pixel it can get at 24dp. Strokes are
+  left at their drawn weight rather than thinned: at this size the arrow is
+  about a pixel and a half wide, and anything lighter disappears.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="1.15"
+        android:scaleY="1.15">
+
+        <path
+            android:pathData="M41,24 L67,24 A13,13 0 0 1 80,37 L80,53 A13,13 0 0 1 67,66 L41,66 L28,79 L28,37 A13,13 0 0 1 41,24 Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="8.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M54,33 L54,56"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M44.5,46.5 L54,56 L63.5,46.5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="7"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

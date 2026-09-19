@@ -1,9 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon background. Full-bleed 108dp so every launcher mask (circle,
+  squircle, rounded square) has paint under it.
+
+  Near-black, tinted towards the app's own blue, rather than a field of brand
+  colour. It also carries the whole of the icon's glow: the foreground has no
+  halo stroke, because a vector drawable cannot blur and a wide translucent
+  stroke around a nested mark reads as a grey band rather than as light. A
+  radial gradient has no edge to give itself away, so the light is done here
+  instead.
+
+  The mark is a notification arriving — something the app catches on
+  its own, usually while the phone is sitting idle — and that reads as a signal
+  only against a dark ground. The mint secondary appears as the spill behind
+  the bubble instead of as a fill, which is also what distinguishes this icon
+  at a glance from the sibling apps' blue and amber.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#EAD9FF"
-        android:pathData="M0,0h108v108h-108z" />
+
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="4"
+                android:startY="0"
+                android:endX="104"
+                android:endY="108">
+                <item android:color="#FF131A26" android:offset="0.0" />
+                <item android:color="#FF0B0D10" android:offset="0.55" />
+                <item android:color="#FF090B0E" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!--
+      The light the mark throws, painted on the background layer so it can
+      bleed past the glyph without the foreground's own edges clipping it.
+      Centred on the bubble's body rather than on the canvas, so the glow sits
+      behind the mark instead of behind the tail.
+    -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="52"
+                android:centerY="44"
+                android:gradientRadius="52">
+                <item android:color="#4D90F7E0" android:offset="0.0" />
+                <item android:color="#2490F7E0" android:offset="0.45" />
+                <item android:color="#0090F7E0" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

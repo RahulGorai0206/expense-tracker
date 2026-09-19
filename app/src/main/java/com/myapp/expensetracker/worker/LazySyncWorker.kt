@@ -95,7 +95,7 @@ class LazySyncWorker(
         )
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(if (done) "Lazy Sync finished" else "Lazy Sync running")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))

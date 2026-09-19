@@ -1,42 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon foreground: a message, with money leaving inside it.
+
+  The mark is what actually makes this app different from every other expense
+  tracker. It does not ask you to type anything — a bank SMS arrives and
+  becomes a tracked transaction on its own. So the glyph is the message, and
+  the thing inside the message is the spend.
+
+  Deliberately not a wallet, a coin, a currency sign or a bar chart. Those are
+  what the whole category draws, they are interchangeable at 48dp, and a chart
+  in particular illustrates the least distinctive screen in the app rather than
+  the mechanism. (The icon this replaces was a bar chart.)
+
+  ## Why there is no halo stroke here
+
+  The sibling apps draw their marks twice — a wide translucent pass beneath a
+  narrow bright one — to make them read as lit. That does not work for this
+  mark and it was tried. A vector drawable cannot blur, so a wide translucent
+  stroke has a hard edge: on an open glyph it passes for glow, but here the
+  arrow sits *inside* the bubble, the two halos overlap in the gap between
+  them, and the result is a muddy grey band tracing the shape rather than light
+  coming off it.
+
+  The glow is done entirely by the radial spill on the background layer
+  instead, which has no edge to give itself away. Same effect, same family,
+  one fewer lie.
+
+  Geometry: a rounded speech bubble spanning (28,24) to (80,66), corner radius
+  13, its bottom-left corner drawn out into a tail at (28,79); a down arrow
+  centred in the body.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!--
+      The mask reveals the middle 72dp of this 108dp canvas. With no halo to
+      clear, the mark can sit larger than the sibling apps' do: at 0.80 the
+      outermost points — the bubble's top corners and the tail's tip — are
+      inside the rim with the margin an app icon is expected to keep beside its
+      neighbours.
+    -->
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="0.75"
-        android:scaleY="0.75">
-        <!-- baseline -->
+        android:scaleX="0.80"
+        android:scaleY="0.80">
+
+        <!--
+          The bubble. Stroked rather than filled so the arrow inside stays
+          legible: a filled bubble would need the arrow knocked out of it, and
+          a knockout collapses the moment the themed-icon layer flattens the
+          colour away.
+        -->
         <path
-            android:strokeColor="#35245C"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M24,76 L84,76" />
-        <!-- bar 1 (short) -->
+            android:pathData="M41,24 L67,24 A13,13 0 0 1 80,37 L80,53 A13,13 0 0 1 67,66 L41,66 L28,79 L28,37 A13,13 0 0 1 41,24 Z"
+            android:strokeWidth="8.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="28"
+                    android:startY="24"
+                    android:endX="80"
+                    android:endY="80">
+                    <item android:color="#FFFFFFFF" android:offset="0.0" />
+                    <item android:color="#FF9BF3DF" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!--
+          The arrow. Held at flat white while the bubble carries the gradient,
+          so the spend is the brightest thing in the mark rather than competing
+          with its container.
+
+          Thinner than the bubble, at 6.5. At the bubble's own weight the head
+          and shaft round-caps merge into a single lump — it stops reading as
+          an arrow and starts reading as a mushroom, which is exactly what the
+          first draft of this did.
+        -->
         <path
-            android:strokeColor="#35245C"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M36,76 L36,62" />
-        <!-- bar 2 (medium) -->
+            android:pathData="M54,33 L54,56"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round" />
         <path
-            android:strokeColor="#35245C"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M54,76 L54,52" />
-        <!-- bar 3 (tall) -->
-        <path
-            android:strokeColor="#35245C"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M72,76 L72,36" />
-        <!-- circle on tallest bar -->
-        <path
-            android:strokeColor="#35245C"
-            android:strokeWidth="5.5"
-            android:strokeLineCap="round"
-            android:pathData="M72,30 m-6,0 a6,6 0,1 1,12 0 a6,6 0,1 1,-12 0" />
+            android:pathData="M44.5,46.5 L54,56 L63.5,46.5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
     </group>
 </vector>
