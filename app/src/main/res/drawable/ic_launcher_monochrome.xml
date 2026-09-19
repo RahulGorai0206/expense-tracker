@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Monochrome layer for Android 13+ themed icons. The launcher discards colour
-  and tints the alpha channel, so this is the mark in one flat value.
+  and tints the alpha channel, so ring and slice arrive as one value.
 
-  It survives flattening because the arrow is separated from the bubble by real
-  negative space rather than by a colour difference — which is the reason the
-  bubble is stroked rather than filled.
-
-  Same scale as the colour foreground, so switching themed icons on and off
-  does not change how big the icon looks on the home screen.
+  The mark survives that because the slice is separated from the ring by real
+  negative space — the gap it was displaced out of — rather than by a colour
+  difference. This is the reason the slice is pushed along its own bisector: a
+  displacement in any other direction leaves the two shapes overlapping on one
+  side, and in flat colour they would fuse into a blob.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -16,29 +15,15 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M74.63,44.00 A24.5,24.5 0 1,1 52.14,31.01 L52.60,43.91 A11.6,11.6 0 1,0 63.24,50.05 Z" />
+
     <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.80"
-        android:scaleY="0.80">
-
+        android:translateX="5.0"
+        android:translateY="-8.66">
         <path
-            android:pathData="M41,24 L67,24 A13,13 0 0 1 80,37 L80,53 A13,13 0 0 1 67,66 L41,66 L28,79 L28,37 A13,13 0 0 1 41,24 Z"
-            android:strokeColor="#FF000000"
-            android:strokeWidth="8.5"
-            android:strokeLineJoin="round"
-            android:strokeLineCap="round" />
-
-        <path
-            android:pathData="M54,33 L54,56"
-            android:strokeColor="#FF000000"
-            android:strokeWidth="6.5"
-            android:strokeLineCap="round" />
-        <path
-            android:pathData="M44.5,46.5 L54,56 L63.5,46.5"
-            android:strokeColor="#FF000000"
-            android:strokeWidth="6.5"
-            android:strokeLineJoin="round"
-            android:strokeLineCap="round" />
+            android:fillColor="#FF000000"
+            android:pathData="M52.14,31.01 A24.5,24.5 0 0,1 74.63,44.00 L63.24,50.05 A11.6,11.6 0 0,0 52.60,43.91 Z" />
     </group>
 </vector>

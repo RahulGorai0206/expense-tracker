@@ -1,34 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Adaptive-icon foreground: a message, with money leaving inside it.
+  Adaptive-icon foreground: a ring of money with one slice pulled out of it.
 
-  The mark is what actually makes this app different from every other expense
-  tracker. It does not ask you to type anything — a bank SMS arrives and
-  becomes a tracked transaction on its own. So the glyph is the message, and
-  the thing inside the message is the spend.
+  The ring is the balance; the displaced wedge is what just left. That reads
+  without explanation, which is the test the previous icon failed — a message
+  bubble with an arrow in it was a clever sentence about how the app works and
+  a meaningless shape at 48dp.
 
   Deliberately not a wallet, a coin, a currency sign or a bar chart. Those are
-  what the whole category draws, they are interchangeable at 48dp, and a chart
-  in particular illustrates the least distinctive screen in the app rather than
-  the mechanism. (The icon this replaces was a bar chart.)
+  what the whole category draws and they are interchangeable at icon size.
 
-  ## Why there is no halo stroke here
+  ## Why each piece is one explicit path
 
-  The sibling apps draw their marks twice — a wide translucent pass beneath a
-  narrow bright one — to make them read as lit. That does not work for this
-  mark and it was tried. A vector drawable cannot blur, so a wide translucent
-  stroke has a hard edge: on an open glyph it passes for glow, but here the
-  arrow sits *inside* the bubble, the two halos overlap in the gap between
-  them, and the result is a muddy grey band tracing the shape rather than light
-  coming off it.
+  The obvious construction is even-odd: an outer circle, an inner circle to
+  punch the hole, and a wedge to cut the gap. That is wrong, and silently so.
+  Even-odd fills anything covered an odd number of times, so the part of the
+  wedge lying inside the centre hole is covered three times and comes back
+  filled — a stray triangle in the middle of the ring.
 
-  The glow is done entirely by the radial spill on the background layer
-  instead, which has no edge to give itself away. Same effect, same family,
-  one fewer lie.
+  Both shapes are therefore authored as closed annular sectors instead: the
+  ring is the 296 degrees that remain, the slice is the 64 degrees that left.
+  No fill rule, nothing to get wrong.
 
-  Geometry: a rounded speech bubble spanning (28,24) to (80,66), corner radius
-  13, its bottom-left corner drawn out into a tail at (28,79); a down arrow
-  centred in the body.
+  Geometry: centre (53,55.5), outer radius 24.5, inner 11.6; the slice spans
+  -92 to -28 degrees and is displaced 10 along its own bisector, so it travels
+  straight out of the gap it came from. The furthest point of the artwork sits
+  32.7 from the icon centre, just inside the 33 the mask guarantees.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -37,63 +34,33 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- The balance. -->
+    <path android:pathData="M74.63,44.00 A24.5,24.5 0 1,1 52.14,31.01 L52.60,43.91 A11.6,11.6 0 1,0 63.24,50.05 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="28"
+                android:startY="30"
+                android:endX="80"
+                android:endY="82">
+                <item android:color="#FF8FF3E2" android:offset="0.0" />
+                <item android:color="#FF4FCFC4" android:offset="0.55" />
+                <item android:color="#FF3D8BFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
     <!--
-      The mask reveals the middle 72dp of this 108dp canvas. With no halo to
-      clear, the mark can sit larger than the sibling apps' do: at 0.80 the
-      outermost points — the bubble's top corners and the tail's tip — are
-      inside the rim with the margin an app icon is expected to keep beside its
-      neighbours.
+      What left. Flat and brighter than the ring rather than continuing its
+      gradient: the slice has to read as a separate object that has moved, and
+      a gradient running continuously through both would glue them back
+      together.
     -->
     <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.80"
-        android:scaleY="0.80">
-
-        <!--
-          The bubble. Stroked rather than filled so the arrow inside stays
-          legible: a filled bubble would need the arrow knocked out of it, and
-          a knockout collapses the moment the themed-icon layer flattens the
-          colour away.
-        -->
+        android:translateX="5.0"
+        android:translateY="-8.66">
         <path
-            android:pathData="M41,24 L67,24 A13,13 0 0 1 80,37 L80,53 A13,13 0 0 1 67,66 L41,66 L28,79 L28,37 A13,13 0 0 1 41,24 Z"
-            android:strokeWidth="8.5"
-            android:strokeLineJoin="round"
-            android:strokeLineCap="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="28"
-                    android:startY="24"
-                    android:endX="80"
-                    android:endY="80">
-                    <item android:color="#FFFFFFFF" android:offset="0.0" />
-                    <item android:color="#FF9BF3DF" android:offset="1.0" />
-                </gradient>
-            </aapt:attr>
-        </path>
-
-        <!--
-          The arrow. Held at flat white while the bubble carries the gradient,
-          so the spend is the brightest thing in the mark rather than competing
-          with its container.
-
-          Thinner than the bubble, at 6.5. At the bubble's own weight the head
-          and shaft round-caps merge into a single lump — it stops reading as
-          an arrow and starts reading as a mushroom, which is exactly what the
-          first draft of this did.
-        -->
-        <path
-            android:pathData="M54,33 L54,56"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="6.5"
-            android:strokeLineCap="round" />
-        <path
-            android:pathData="M44.5,46.5 L54,56 L63.5,46.5"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="6.5"
-            android:strokeLineJoin="round"
-            android:strokeLineCap="round" />
+            android:fillColor="#FFA9FBE8"
+            android:pathData="M52.14,31.01 A24.5,24.5 0 0,1 74.63,44.00 L63.24,50.05 A11.6,11.6 0 0,0 52.60,43.91 Z" />
     </group>
 </vector>
