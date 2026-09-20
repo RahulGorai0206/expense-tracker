@@ -1,7 +1,7 @@
 [versions]
 appVersion = "2.2.1"
 appVersionCode = "2"
-agp = "9.3.3"
+agp = "9.4.1"
 kotlin = "2.3.21"
 coreKtx = "1.18.0"
 splashscreen = "1.2.0"
