@@ -18,8 +18,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.myapp.expensetracker.LoanRepayment
 import com.myapp.expensetracker.LoanWithRepayments
 import com.myapp.expensetracker.PotContribution
@@ -219,23 +218,25 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
 
 @Composable
 private fun PersonSummaryCard(state: PersonDetailState) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                "Still owed",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                "STILL OWED",
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 formatLedgerAmount(state.outstanding),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -243,8 +244,8 @@ private fun PersonSummaryCard(state: PersonDetailState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                LedgerStat("Lent", formatLedgerAmount(state.totalLent))
-                LedgerStat("Paid back", formatLedgerAmount(state.totalRepaid))
+                LedgerStat("LENT", formatLedgerAmount(state.totalLent))
+                LedgerStat("PAID BACK", formatLedgerAmount(state.totalRepaid))
             }
         }
     }
@@ -256,12 +257,13 @@ private fun LedgerStat(label: String, value: String) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
         )
         Text(
             value,
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
@@ -274,12 +276,12 @@ private fun LoanCard(
     onDelete: () -> Unit,
     onDeleteRepayment: (LoanRepayment) -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -290,20 +292,21 @@ private fun LoanCard(
                     Text(
                         loan.loan.reason.ifBlank { "No reason recorded" },
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        formatLedgerDate(loan.loan.lentAt),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        formatLedgerDate(loan.loan.lentAt).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         formatLedgerAmount(loan.loan.amount),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
@@ -514,23 +517,25 @@ fun PotDetailScreen(potId: Long, onBack: () -> Unit) {
 
 @Composable
 private fun PotSummaryCard(summary: PotSummary) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                "Total saved",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                "TOTAL SAVED",
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 formatLedgerAmount(summary.totalSaved),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             if (summary.lentOut > 0.0) {
@@ -539,8 +544,8 @@ private fun PotSummaryCard(summary: PotSummary) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    LedgerStat("Lent out", formatLedgerAmount(summary.lentOut))
-                    LedgerStat("Available", formatLedgerAmount(summary.available))
+                    LedgerStat("LENT OUT", formatLedgerAmount(summary.lentOut))
+                    LedgerStat("AVAILABLE", formatLedgerAmount(summary.available))
                 }
             }
         }
@@ -551,8 +556,10 @@ private fun PotSummaryCard(summary: PotSummary) {
 private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Row(
             modifier = Modifier
@@ -565,6 +572,7 @@ private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit)
                 Text(
                     formatLedgerDate(contribution.addedAt),
                     style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 if (contribution.note.isNotBlank()) {
@@ -577,8 +585,8 @@ private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit)
             }
             Text(
                 formatLedgerAmount(contribution.amount),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Box {

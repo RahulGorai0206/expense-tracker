@@ -1,6 +1,17 @@
 package com.myapp.expensetracker.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,24 +23,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -43,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.myapp.expensetracker.PersonBalance
 import com.myapp.expensetracker.PotSummary
 import com.myapp.expensetracker.ui.components.EmptyState
@@ -55,6 +63,13 @@ import java.util.Locale
 internal fun formatLedgerAmount(amount: Double): String =
     String.format(Locale.getDefault(), "₹%,.2f", amount)
 
+/** The three hand-kept ledgers, in tab order. */
+private enum class LedgerTabs(val label: String, val addLabel: String) {
+    SPLIT("Split", "Create event"),
+    LENDING("Lending", "Add person"),
+    SAVINGS("Savings", "Add savings pot")
+}
+
 /**
  * Every hand-kept record in the app: shared costs, money lent out, and money
  * set aside.
@@ -65,7 +80,6 @@ internal fun formatLedgerAmount(amount: Double): String =
  * have never been linked to detected transactions, so they belong on this side
  * of that line too.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LedgersScreen(
     onEventClick: (Long) -> Unit,
@@ -132,41 +146,51 @@ fun LedgersScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.background,
-                modifier = Modifier.clip(RoundedCornerShape(12.dp))
-            ) {
-                LedgerTabs.entries.forEachIndexed { index, tab ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(tab.label) }
-                    )
-                }
-            }
+            LedgerTabRow(
+                selected = selectedTab,
+                onSelect = { selectedTab = it }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            when (LedgerTabs.entries[selectedTab]) {
-                LedgerTabs.SPLIT -> SplitTabContent(
-                    onEventClick = onEventClick,
-                    onCreateEvent = { showCreateEvent = true }
-                )
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    // Slide toward the tab that was tapped, matching the
+                    // direction of travel in the pill above.
+                    val forward = targetState > initialState
+                    val enter = slideInHorizontally(tween(320)) { width ->
+                        if (forward) width / 3 else -width / 3
+                    } + fadeIn(tween(220))
+                    val exit = slideOutHorizontally(tween(320)) { width ->
+                        if (forward) -width / 3 else width / 3
+                    } + fadeOut(tween(160))
+                    // clip = false so a list doesn't get visibly cropped while
+                    // the two tabs cross over each other.
+                    (enter togetherWith exit).using(SizeTransform(clip = false))
+                },
+                label = "ledgerTab"
+            ) { tab ->
+                when (LedgerTabs.entries[tab]) {
+                    LedgerTabs.SPLIT -> SplitTabContent(
+                        onEventClick = onEventClick,
+                        onCreateEvent = { showCreateEvent = true }
+                    )
 
-                LedgerTabs.LENDING -> LendingTab(
-                    people = state.people,
-                    totalOutstanding = state.totalOutstanding,
-                    onPersonClick = onPersonClick
-                )
+                    LedgerTabs.LENDING -> LendingTab(
+                        people = state.people,
+                        totalOutstanding = state.totalOutstanding,
+                        onPersonClick = onPersonClick
+                    )
 
-                LedgerTabs.SAVINGS -> SavingsTab(
-                    pots = state.pots,
-                    totalSaved = state.totalSaved,
-                    onPotClick = onPotClick
-                )
+                    LedgerTabs.SAVINGS -> SavingsTab(
+                        pots = state.pots,
+                        totalSaved = state.totalSaved,
+                        onPotClick = onPotClick
+                    )
+                }
             }
         }
 
@@ -196,11 +220,54 @@ fun LedgersScreen(
     }
 }
 
-/** The three hand-kept ledgers, in tab order. */
-private enum class LedgerTabs(val label: String, val addLabel: String) {
-    SPLIT("Split", "Create event"),
-    LENDING("Lending", "Add person"),
-    SAVINGS("Savings", "Add savings pot")
+/**
+ * Animated pill selector, matching the date-range chips on Analytics rather than
+ * a stock TabRow — the underline indicator was the one piece of unstyled
+ * Material in an app that uses rounded, colour-animated controls throughout.
+ */
+@Composable
+private fun LedgerTabRow(selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        LedgerTabs.entries.forEachIndexed { index, tab ->
+            val isSelected = selected == index
+            val bgColor by animateColorAsState(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+                label = "ledgerTabBg"
+            )
+            val textColor by animateColorAsState(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                label = "ledgerTabText"
+            )
+
+            Surface(
+                onClick = { onSelect(index) },
+                shape = RoundedCornerShape(100.dp),
+                color = bgColor,
+                tonalElevation = if (isSelected) 0.dp else 2.dp
+            ) {
+                Text(
+                    text = tab.label,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = textColor,
+                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -225,7 +292,7 @@ private fun LendingTab(
     ) {
         item {
             LedgerHeadlineCard(
-                label = "Still owed to you",
+                label = "STILL OWED TO YOU",
                 amount = totalOutstanding,
                 // Nothing outstanding reads as settled rather than as a warning.
                 emphasise = totalOutstanding > 0.0
@@ -264,7 +331,7 @@ private fun SavingsTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            LedgerHeadlineCard(label = "Total saved", amount = totalSaved, emphasise = true)
+            LedgerHeadlineCard(label = "TOTAL SAVED", amount = totalSaved, emphasise = true)
         }
         items(pots, key = { it.pot.id }) { summary ->
             Box(modifier = Modifier.animateItem()) {
@@ -277,32 +344,33 @@ private fun SavingsTab(
 
 @Composable
 private fun LedgerHeadlineCard(label: String, amount: Double, emphasise: Boolean) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (emphasise) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            }
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = if (emphasise) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 label,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp,
                 color = if (emphasise) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 }
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 formatLedgerAmount(amount),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 color = if (emphasise) {
                     MaterialTheme.colorScheme.onPrimaryContainer
                 } else {
@@ -313,59 +381,62 @@ private fun LedgerHeadlineCard(label: String, amount: Double, emphasise: Boolean
     }
 }
 
+/** Leading badge in the shape SplitEventCard established: 52dp rounded square. */
+@Composable
+private fun LedgerCardBadge(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
 @Composable
 private fun PersonBalanceCard(balance: PersonBalance, onClick: () -> Unit) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            balance.person.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.size(12.dp))
-                Column {
-                    Text(
-                        balance.person.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        personSubtitle(balance),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            LedgerCardBadge {
+                Text(
+                    balance.person.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    balance.person.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+                Text(
+                    personSubtitle(balance),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    letterSpacing = 1.sp
+                )
+            }
             Text(
                 formatLedgerAmount(balance.outstanding),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                fontWeight = FontWeight.Black,
                 color = when {
                     balance.outstanding > 0.0 -> MaterialTheme.colorScheme.primary
                     // Overpaid: surfaced rather than hidden, it usually means a
@@ -379,94 +450,118 @@ private fun PersonBalanceCard(balance: PersonBalance, onClick: () -> Unit) {
 }
 
 private fun personSubtitle(balance: PersonBalance): String = when {
-    balance.openLoanCount == 0 && balance.totalLent > 0.0 -> "All settled"
-    balance.openLoanCount == 0 -> "No loans yet"
-    balance.openLoanCount == 1 -> "1 open loan"
-    else -> "${balance.openLoanCount} open loans"
+    balance.openLoanCount == 0 && balance.totalLent > 0.0 -> "ALL SETTLED"
+    balance.openLoanCount == 0 -> "NO LOANS YET"
+    balance.openLoanCount == 1 -> "1 OPEN LOAN"
+    else -> "${balance.openLoanCount} OPEN LOANS"
 }
 
 @Composable
 private fun PotCard(summary: PotSummary, onClick: () -> Unit) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LedgerCardBadge {
+                    Icon(
+                        Icons.Default.Savings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         summary.pot.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
                     Text(
                         if (summary.contributionCount == 1) {
-                            "1 contribution"
+                            "1 CONTRIBUTION"
                         } else {
-                            "${summary.contributionCount} contributions"
+                            "${summary.contributionCount} CONTRIBUTIONS"
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        letterSpacing = 1.sp
                     )
                 }
                 Text(
                     formatLedgerAmount(summary.totalSaved),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
             summary.progress?.let { progress ->
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Goal ${formatLedgerAmount(summary.pot.targetAmount ?: 0.0)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "GOAL ${formatLedgerAmount(summary.pot.targetAmount ?: 0.0)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
 
             // Only shown when money from this pot is actually out with someone,
             // so the headline figure is never quietly overstated.
             if (summary.lentOut > 0.0) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            "${formatLedgerAmount(summary.lentOut)} lent out",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "${formatLedgerAmount(summary.available)} available",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        LedgerMiniStat("LENT OUT", formatLedgerAmount(summary.lentOut))
+                        LedgerMiniStat("AVAILABLE", formatLedgerAmount(summary.available))
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LedgerMiniStat(label: String, value: String) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
