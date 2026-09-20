@@ -65,6 +65,8 @@ import com.myapp.expensetracker.ui.screens.*
 import com.myapp.expensetracker.ui.theme.LedgerTheme
 import androidx.core.content.edit
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -392,21 +394,56 @@ private fun MainAppContent(
     // The nav bar height + padding ≈ 100dp. We track cumulative scroll
     // delta and translate the bar off-screen when scrolling down.
     val navBarHeightPx = with(LocalDensity.current) { 100.dp.toPx() }
-    var navBarOffsetPx by remember { mutableFloatStateOf(0f) }
+
+    // Kept out of composition on purpose.
+    //
+    // This used to be a `mutableFloatStateOf` written on every scroll delta and
+    // read back by `animateFloatAsState(targetValue = …)` right here — a
+    // snapshot read in *this* composable's scope, which contains the Scaffold,
+    // the pager and every detail overlay. So each scroll frame invalidated the
+    // largest composable in the app: 60 times a second on a 60Hz panel, 120 on
+    // a 120Hz one, where the frame budget is only 8.3ms to begin with.
+    //
+    // The target now lives in a plain flow (no snapshot state, so writing it
+    // recomposes nothing), a single coroutine animates an Animatable toward it,
+    // and the result is read only inside the `offset { }` lambda below — a
+    // layout-phase read. Scrolling costs a relayout instead of a recomposition.
+    val navBarOffset = remember { Animatable(0f) }
+    val navBarTarget = remember { MutableStateFlow(0f) }
+
+    LaunchedEffect(navBarOffset, navBarTarget) {
+        // collectLatest cancels the in-flight animation when a new target
+        // arrives, which is exactly what animateFloatAsState did — the spring
+        // resumes from the current value and velocity, so the trailing feel of
+        // the bar is unchanged.
+        navBarTarget.collectLatest { target ->
+            navBarOffset.animateTo(
+                targetValue = target,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
 
     // Reset nav bar when switching tabs
     LaunchedEffect(pagerState.currentPage) {
-        navBarOffsetPx = 0f
+        navBarTarget.value = 0f
     }
 
-    val nestedScrollConnection = remember {
+    // Keyed: navBarHeightPx is derived from density, and an unkeyed remember
+    // would pin the connection to whatever it was on first composition.
+    val nestedScrollConnection = remember(navBarHeightPx, navBarTarget) {
         object : NestedScrollConnection {
+            private fun nudgeBy(delta: Float) {
+                navBarTarget.value =
+                    (navBarTarget.value - delta).coerceIn(0f, navBarHeightPx * 2)
+            }
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 // When scrolling UP, show the bar immediately
-                if (available.y > 0) {
-                    val newOffset = navBarOffsetPx - available.y
-                    navBarOffsetPx = newOffset.coerceIn(0f, navBarHeightPx * 2)
-                }
+                if (available.y > 0) nudgeBy(available.y)
                 return Offset.Zero
             }
 
@@ -417,23 +454,11 @@ private fun MainAppContent(
             ): Offset {
                 // When scrolling DOWN, hide the bar ONLY if the child consumed some scroll
                 // (meaning there was actual scrollable content)
-                if (consumed.y < 0) {
-                    val newOffset = navBarOffsetPx - consumed.y
-                    navBarOffsetPx = newOffset.coerceIn(0f, navBarHeightPx * 2)
-                }
+                if (consumed.y < 0) nudgeBy(consumed.y)
                 return Offset.Zero
             }
         }
     }
-
-    val animatedNavOffset by animateFloatAsState(
-        targetValue = navBarOffsetPx,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "navOffset"
-    )
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -496,7 +521,8 @@ private fun MainAppContent(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 20.dp)
-                        .offset { IntOffset(0, animatedNavOffset.roundToInt()) },
+                        // Read inside the lambda: layout phase, not composition.
+                        .offset { IntOffset(0, navBarOffset.value.roundToInt()) },
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     shape = RoundedCornerShape(100.dp),
                     tonalElevation = 8.dp,
