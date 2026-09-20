@@ -81,7 +81,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -299,7 +299,10 @@ fun SplitEventDetailScreen(eventId: Long, onBack: () -> Unit) {
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            TabRow(
+            // SecondaryTabRow, not PrimaryTabRow: the deprecated TabRow defaulted
+            // to the full-width secondary indicator, so this keeps the tabs
+            // looking exactly as they did.
+            SecondaryTabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.background
             ) {

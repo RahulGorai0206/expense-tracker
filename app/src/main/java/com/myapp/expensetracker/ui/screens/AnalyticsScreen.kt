@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.LabelOff
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -211,7 +213,7 @@ fun AnalyticsScreen() {
 
         // ── Tag Donut Chart ────────────────────────────────────────────
         item {
-            SectionHeader(title = "Tag Breakdown", icon = Icons.Default.Label)
+            SectionHeader(title = "Tag Breakdown", icon = Icons.AutoMirrored.Filled.Label)
             Spacer(modifier = Modifier.height(12.dp))
             if (state.isLoading) {
                 ChartSkeleton(circular = true)
@@ -702,8 +704,8 @@ private fun TagDonutChart(tags: List<TagSpending>) {
                 val percentage = if (total > 0) (tag.total / total * 100) else 0.0
                 val color = if (tag.tagLabel == "Untagged") UntaggedColor
                 else TagChartColors[index % TagChartColors.size]
-                val icon = if (tag.tagLabel == "Untagged") Icons.Default.LabelOff
-                else Icons.Default.Label
+                val icon = if (tag.tagLabel == "Untagged") Icons.AutoMirrored.Filled.LabelOff
+                else Icons.AutoMirrored.Filled.Label
 
                 Row(
                     modifier = Modifier
