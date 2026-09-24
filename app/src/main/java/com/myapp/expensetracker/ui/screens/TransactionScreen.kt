@@ -62,7 +62,8 @@ enum class SearchFilter(val label: String) {
  */
 fun TransactionScreen(
     onTransactionClick: (Transaction) -> Unit,
-    isForeground: Boolean = true
+    isForeground: Boolean = true,
+    isCurrentPage: Boolean = true
 ) {
     val context = LocalContext.current
     val viewModel: TransactionViewModel = koinViewModel()
@@ -96,6 +97,14 @@ fun TransactionScreen(
     // at most one of these is ever open.
     BackHandler(enabled = isForeground && (selectionMode || isSearchActive)) {
         if (selectionMode) selectedIds = emptySet() else closeSearch()
+    }
+
+    // Leaving the tab drops the selection. The pager keeps this page composed,
+    // so without this a selection survived a trip to another tab and was still
+    // armed for "Delete" on return — the classic way to delete the wrong rows.
+    // Search is deliberately kept: coming back to a half-finished search is useful.
+    LaunchedEffect(isCurrentPage) {
+        if (!isCurrentPage) selectedIds = emptySet()
     }
 
     fun toggleSelection(transaction: Transaction) {

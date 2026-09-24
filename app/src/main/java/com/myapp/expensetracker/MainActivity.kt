@@ -504,7 +504,11 @@ private fun MainAppContent(
                             // Both conditions matter: the pager keeps this page
                             // composed while you're on a neighbour, and a detail
                             // opened from a search result sits on top of it.
-                            isForeground = pagerState.currentPage == 1 && !detailVisible
+                            isForeground = pagerState.currentPage == 1 && !detailVisible,
+                            // settledPage, not currentPage: currentPage flips at
+                            // the halfway point of a drag, so a swipe you abandon
+                            // would otherwise wipe the selection anyway.
+                            isCurrentPage = pagerState.settledPage == 1
                         )
                         2 -> LedgersScreen(
                             onEventClick = { selectedSplitEventId = it },
