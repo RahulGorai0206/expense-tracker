@@ -47,7 +47,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -258,13 +260,31 @@ private fun LedgerTabRow(selected: Int, onSelect: (Int) -> Unit) {
                 color = bgColor,
                 tonalElevation = if (isSelected) 0.dp else 2.dp
             ) {
-                Text(
-                    text = tab.label,
+                Box(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = textColor,
-                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
-                )
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Invisible, always ExtraBold: it fixes the pill's width at
+                    // its widest state. Without it, selecting a tab switched its
+                    // label from Medium to ExtraBold, which measures wider and
+                    // shunted every pill to its right along the row.
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier
+                            .alpha(0f)
+                            // Measured only — never announced, or a screen
+                            // reader would read every label twice.
+                            .clearAndSetSemantics { }
+                    )
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = textColor,
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                    )
+                }
             }
         }
     }
