@@ -499,7 +499,13 @@ private fun MainAppContent(
                             }
                         )
 
-                        1 -> TransactionScreen(onTransactionClick = { selectedTransaction = it })
+                        1 -> TransactionScreen(
+                            onTransactionClick = { selectedTransaction = it },
+                            // Both conditions matter: the pager keeps this page
+                            // composed while you're on a neighbour, and a detail
+                            // opened from a search result sits on top of it.
+                            isForeground = pagerState.currentPage == 1 && !detailVisible
+                        )
                         2 -> LedgersScreen(
                             onEventClick = { selectedSplitEventId = it },
                             onPersonClick = { selectedPersonId = it },

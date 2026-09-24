@@ -1,6 +1,7 @@
 package com.myapp.expensetracker.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -52,7 +53,17 @@ enum class SearchFilter(val label: String) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TransactionScreen(onTransactionClick: (Transaction) -> Unit) {
+/**
+ * @param isForeground true only while History is the visible page *and* no
+ * detail screen is layered over it. The pager keeps neighbouring pages composed,
+ * and this screen's back handler outranks MainActivity's, so without this gate
+ * an open search here would swallow back presses meant for another tab or for
+ * the transaction detail sitting on top.
+ */
+fun TransactionScreen(
+    onTransactionClick: (Transaction) -> Unit,
+    isForeground: Boolean = true
+) {
     val context = LocalContext.current
     val viewModel: TransactionViewModel = koinViewModel()
     val transactions by viewModel.transactions.collectAsState()
@@ -70,6 +81,21 @@ fun TransactionScreen(onTransactionClick: (Transaction) -> Unit) {
 
     val selectedTransactions = remember(transactions, selectedIds) {
         transactions.filter { it.id in selectedIds }
+    }
+
+    // One exit path for search, so the toolbar arrow and the system back gesture
+    // can never leave it in different states.
+    fun closeSearch() {
+        isSearchActive = false
+        searchQuery = ""
+    }
+
+    // Back unwinds the screen's own mode before leaving the tab: selection or
+    // search first, and only then does MainActivity's handler take you Home.
+    // Search and selection are mutually exclusive (see onLongClick below), so
+    // at most one of these is ever open.
+    BackHandler(enabled = isForeground && (selectionMode || isSearchActive)) {
+        if (selectionMode) selectedIds = emptySet() else closeSearch()
     }
 
     fun toggleSelection(transaction: Transaction) {
@@ -158,10 +184,7 @@ fun TransactionScreen(onTransactionClick: (Transaction) -> Unit) {
                                     .padding(horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = {
-                                    isSearchActive = false
-                                    searchQuery = ""
-                                }) {
+                                IconButton(onClick = { closeSearch() }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back",
@@ -460,10 +483,17 @@ fun TransactionScreen(onTransactionClick: (Transaction) -> Unit) {
                                 },
                                 selected = transaction.id in selectedIds,
                                 selectionMode = selectionMode,
-                                onLongClick = {
-                                    if (!selectionMode) {
-                                        selectedIds = setOf(transaction.id)
-                                    }
+                                // Long-press starts selection only from plain
+                                // browsing. null, not a no-op lambda: a non-null
+                                // onLongClick makes combinedClickable fire its
+                                // long-press haptic, which would feel like
+                                // something happened when nothing did. The
+                                // search button is already hidden during
+                                // selection, so this closes the other direction.
+                                onLongClick = if (!selectionMode && !isSearchActive) {
+                                    { selectedIds = setOf(transaction.id) }
+                                } else {
+                                    null
                                 }
                             )
                         }
