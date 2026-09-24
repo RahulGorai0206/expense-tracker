@@ -32,7 +32,13 @@ data class PersonDetailState(
     val loans: List<LoanWithRepayments> = emptyList(),
     val outstanding: Double = 0.0,
     val totalLent: Double = 0.0,
-    val totalRepaid: Double = 0.0
+    val totalRepaid: Double = 0.0,
+    /**
+     * Pot names by id, so a loan can show which pot it was drawn from. Looked up
+     * rather than stored on the loan: renaming a pot then has to update one row,
+     * not every loan that ever came out of it.
+     */
+    val potNamesById: Map<Long, String> = emptyMap()
 )
 
 /** One pot's page: the pot, its running total, and its contribution history. */
@@ -62,14 +68,16 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
 
     fun personDetail(personId: Long): Flow<PersonDetailState> = combine(
         repository.observePerson(personId),
-        repository.observeLoansForPerson(personId)
-    ) { person, loans ->
+        repository.observeLoansForPerson(personId),
+        repository.observePots()
+    ) { person, loans, pots ->
         PersonDetailState(
             person = person,
             loans = loans,
             outstanding = loans.sumOf { it.outstanding },
             totalLent = loans.sumOf { it.loan.amount },
-            totalRepaid = loans.sumOf { it.repaid }
+            totalRepaid = loans.sumOf { it.repaid },
+            potNamesById = pots.associate { it.id to it.name }
         )
     }
 

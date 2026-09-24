@@ -383,7 +383,7 @@ private fun LedgerHeadlineCard(label: String, amount: Double, emphasise: Boolean
 
 /** Leading badge in the shape SplitEventCard established: 52dp rounded square. */
 @Composable
-private fun LedgerCardBadge(content: @Composable () -> Unit) {
+internal fun LedgerCardBadge(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .size(52.dp)

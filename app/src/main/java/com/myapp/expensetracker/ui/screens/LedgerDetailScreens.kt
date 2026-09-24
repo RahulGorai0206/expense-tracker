@@ -10,14 +10,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -29,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.myapp.expensetracker.LoanRepayment
@@ -153,7 +160,16 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(person?.name ?: "Person") },
+                title = {
+                    Text(
+                        person?.name ?: "Person",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -205,6 +221,7 @@ fun PersonDetailScreen(personId: Long, onBack: () -> Unit) {
             items(state.loans, key = { it.loan.id }) { loan ->
                 LoanCard(
                     loan = loan,
+                    potName = loan.loan.fromPotId?.let { state.potNamesById[it] },
                     onRepay = { repayingLoan = loan },
                     onDelete = { deletingLoan = loan },
                     onDeleteRepayment = { deletingRepayment = it }
@@ -272,6 +289,7 @@ private fun LedgerStat(label: String, value: String) {
 @Composable
 private fun LoanCard(
     loan: LoanWithRepayments,
+    potName: String?,
     onRepay: () -> Unit,
     onDelete: () -> Unit,
     onDeleteRepayment: (LoanRepayment) -> Unit
@@ -288,12 +306,24 @@ private fun LoanCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // The 52dp rounded-square badge SplitEventCard established, so a
+                // loan row reads as a sibling of the cards on the tabs above.
+                LedgerCardBadge {
+                    Icon(
+                        Icons.AutoMirrored.Filled.CallMade,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         loan.loan.reason.ifBlank { "No reason recorded" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2
                     )
                     Text(
                         formatLedgerDate(loan.loan.lentAt).uppercase(),
@@ -302,6 +332,7 @@ private fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         formatLedgerAmount(loan.loan.amount),
@@ -310,14 +341,29 @@ private fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        loanStatusLabel(loan),
-                        style = MaterialTheme.typography.bodySmall,
+                        loanStatusLabel(loan).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.sp,
                         color = if (loan.isSettled) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         } else {
                             MaterialTheme.colorScheme.primary
                         }
                     )
+                    // Only when the loan was actually attributed to a pot —
+                    // most aren't, and an empty "FROM —" line would be noise.
+                    potName?.let { name ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "FROM ${name.uppercase()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            letterSpacing = 1.sp,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
 
@@ -373,9 +419,16 @@ private fun LoanCard(
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!loan.isSettled) {
-                    TextButton(onClick = onRepay) { Text("Record repayment") }
+                    TextButton(onClick = onRepay) {
+                        Text("Record repayment", fontWeight = FontWeight.Bold)
+                    }
                 }
-                TextButton(onClick = onDelete) { Text("Delete") }
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete", fontWeight = FontWeight.Bold) }
             }
         }
     }
@@ -456,7 +509,16 @@ fun PotDetailScreen(potId: Long, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(summary?.pot?.name ?: "Savings") },
+                title = {
+                    Text(
+                        summary?.pot?.name ?: "Savings",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -556,7 +618,7 @@ private fun PotSummaryCard(summary: PotSummary) {
 private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 1.dp,
         shadowElevation = 2.dp
@@ -568,20 +630,30 @@ private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit)
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            LedgerCardBadge {
+                Icon(
+                    Icons.Default.Savings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    formatLedgerDate(contribution.addedAt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    contribution.note.ifBlank { "Contribution" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (contribution.note.isNotBlank()) {
-                    Text(
-                        contribution.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    formatLedgerDate(contribution.addedAt).uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
             }
             Text(
                 formatLedgerAmount(contribution.amount),
@@ -589,8 +661,18 @@ private fun ContributionRow(contribution: PotContribution, onDelete: () -> Unit)
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Box {
-                TextButton(onClick = onDelete) { Text("Delete") }
+            // Icon rather than a "Delete" text button: with the badge added,
+            // a word-wide button left the amount no room on a narrow screen.
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Delete contribution",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
