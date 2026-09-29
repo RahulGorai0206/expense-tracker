@@ -3,7 +3,6 @@ package com.myapp.expensetracker.ui.screens
 import android.content.Intent
 import android.provider.ContactsContract
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -188,7 +187,9 @@ fun SplitEventDetailScreen(eventId: Long, onBack: () -> Unit) {
     val appUserStore: AppUserStore = koinInject()
     val appUserName by viewModel.appUserName.collectAsState()
 
-    BackHandler(onBack = onBack)
+    // No BackHandler here: MainActivity's predictive handler closes every
+    // detail page. A plain one registered this deep outranked it, so back on a
+    // split event just vanished instead of following the gesture.
 
     LaunchedEffect(eventState.event) {
         if (eventState.event != null) {

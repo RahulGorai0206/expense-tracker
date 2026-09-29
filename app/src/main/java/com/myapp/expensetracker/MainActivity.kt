@@ -18,6 +18,7 @@ import kotlin.math.hypot
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlin.coroutines.cancellation.CancellationException
 import androidx.compose.animation.core.Animatable
@@ -68,6 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 // FragmentActivity rather than ComponentActivity: BiometricPrompt requires it
@@ -338,48 +340,55 @@ private fun MainAppContent(
     var selectedPersonId by remember { mutableStateOf<Long?>(null) }
     var selectedPotId by remember { mutableStateOf<Long?>(null) }
 
-    // Keep reference to the last selected transaction for exit animation
-    var lastSelectedTransaction by remember { mutableStateOf<Transaction?>(null) }
-    if (selectedTransaction != null) {
-        lastSelectedTransaction = selectedTransaction
+    // ── Detail pages ────────────────────────────────────────────────
+    // Only one is ever open. Which one is derived from the selections above,
+    // so the call sites that open a page stay exactly as they were.
+    val currentDetail: DetailPage? = when {
+        selectedTransaction != null -> DetailPage.TransactionPage(selectedTransaction!!)
+        selectedSplitEventId != null -> DetailPage.SplitEventPage(selectedSplitEventId!!)
+        selectedPersonId != null -> DetailPage.PersonPage(selectedPersonId!!)
+        selectedPotId != null -> DetailPage.PotPage(selectedPotId!!)
+        else -> null
     }
-    var lastSelectedSplitEventId by remember { mutableStateOf<Long?>(null) }
-    if (selectedSplitEventId != null) {
-        lastSelectedSplitEventId = selectedSplitEventId
-    }
-    var lastSelectedPersonId by remember { mutableStateOf<Long?>(null) }
-    if (selectedPersonId != null) {
-        lastSelectedPersonId = selectedPersonId
-    }
-    var lastSelectedPotId by remember { mutableStateOf<Long?>(null) }
-    if (selectedPotId != null) {
-        lastSelectedPotId = selectedPotId
+    val detailVisible = currentDetail != null
+
+    // The page that was open, kept composed while it slides away after its
+    // selection has already been cleared.
+    var lastDetail by remember { mutableStateOf<DetailPage?>(null) }
+    SideEffect { if (currentDetail != null) lastDetail = currentDetail }
+    val renderedDetail = currentDetail ?: lastDetail
+
+    // One number drives the whole transition: 0 = no page, 1 = page fully open.
+    // The page's slide, the parallax underneath, the bottom pill and the back
+    // gesture all read this one value, so they can never drift out of step.
+    val pageReveal = remember { Animatable(0f) }
+
+    LaunchedEffect(detailVisible) {
+        // Runs from wherever the value currently is — so a committed back
+        // gesture finishes the slide from where the finger let go, and opening
+        // a page mid-close reverses smoothly instead of restarting.
+        pageReveal.animateTo(if (detailVisible) 1f else 0f, PagePush.spec())
+        if (!detailVisible) lastDetail = null
     }
 
     // ── Predictive back ─────────────────────────────────────────────
-    // Dismissing a detail screen follows the finger: the overlay shrinks and
-    // slides as the gesture progresses, so the user can see where back leads
-    // and abandon it. Committing the gesture dismisses; cancelling springs back.
-    val detailVisible = selectedTransaction != null || selectedSplitEventId != null ||
-        selectedPersonId != null || selectedPotId != null
-    val backProgress = remember { Animatable(0f) }
-
+    // The gesture scrubs the real close transition rather than playing a
+    // separate peek effect: the page tracks the finger and the screen beneath
+    // slides back in behind it. Let go and the slide finishes; back out and it
+    // eases open again.
     PredictiveBackHandler(enabled = detailVisible) { events ->
         try {
-            events.collect { event -> backProgress.snapTo(event.progress) }
-            // Flow completed without cancellation — the gesture was committed.
-            // Only one detail is ever open at a time; checked in the order they
-            // can be opened so the innermost always wins.
+            events.collect { event -> pageReveal.snapTo(1f - event.progress) }
+            // Committed. Clearing the selection hands over to the
+            // LaunchedEffect above, which completes the slide from here.
             when {
                 selectedTransaction != null -> selectedTransaction = null
                 selectedSplitEventId != null -> selectedSplitEventId = null
                 selectedPersonId != null -> selectedPersonId = null
                 else -> selectedPotId = null
             }
-            backProgress.snapTo(0f)
         } catch (cancelled: CancellationException) {
-            // Gesture abandoned — ease the peek back rather than snapping.
-            backProgress.animateTo(0f, tween(220))
+            pageReveal.animateTo(1f, PagePush.spec())
         }
     }
 
@@ -475,7 +484,14 @@ private fun MainAppContent(
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Drifts a third of the way left as a page is pushed on
+                        // top, so the two read as a stack. Read in the layer
+                        // lambda: a draw-phase transform, no recomposition.
+                        .graphicsLayer {
+                            translationX = -pageReveal.value * size.width / PagePush.PARALLAX_DIVISOR
+                        },
                     // 1, not 2: this composed up to five tabs at once, including
                     // the two largest screens in the app. One neighbour is
                     // enough to keep swipes smooth.
@@ -532,7 +548,12 @@ private fun MainAppContent(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 20.dp)
                         // Read inside the lambda: layout phase, not composition.
-                        .offset { IntOffset(0, navBarOffset.value.roundToInt()) },
+                        // Whichever is further down wins: hidden by scrolling,
+                        // or sliding away because a page is opening over it.
+                        .offset {
+                            val pageHide = pageReveal.value * navBarHeightPx * 2
+                            IntOffset(0, max(navBarOffset.value, pageHide).roundToInt())
+                        },
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     shape = RoundedCornerShape(100.dp),
                     tonalElevation = 8.dp,
@@ -590,104 +611,38 @@ private fun MainAppContent(
                 }
             }
 
-            // === Layer 2: Detail screen overlay — slides in/out on top ===
-            AnimatedVisibility(
-                visible = selectedTransaction != null,
-                modifier = Modifier.graphicsLayer {
-                    // Follows the back gesture: ease away from the edge so the
-                    // screen underneath is revealed progressively.
-                    val progress = backProgress.value
-                    translationX = progress * size.width * 0.18f
-                    scaleX = 1f - progress * 0.08f
-                    scaleY = 1f - progress * 0.08f
-                    alpha = 1f - progress * 0.15f
-                },
-                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
-                    animationSpec = tween(500)
-                ),
-                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
-                    animationSpec = tween(500)
-                )
-            ) {
-                lastSelectedTransaction?.let { transaction ->
-                    TransactionDetailScreen(
-                        initialTransaction = transaction,
-                        onBack = { selectedTransaction = null }
-                    )
-                }
-            }
+            // === Layer 2: the open detail page, pushed in from the right ===
+            renderedDetail?.let { page ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // A pure translation of an already-composed layer:
+                        // nothing remeasures during the slide.
+                        .graphicsLayer {
+                            translationX = (1f - pageReveal.value) * size.width
+                        }
+                ) {
+                    when (page) {
+                        is DetailPage.TransactionPage -> TransactionDetailScreen(
+                            initialTransaction = page.transaction,
+                            onBack = { selectedTransaction = null }
+                        )
 
-            AnimatedVisibility(
-                visible = selectedSplitEventId != null,
-                modifier = Modifier.graphicsLayer {
-                    // Follows the back gesture: ease away from the edge so the
-                    // screen underneath is revealed progressively.
-                    val progress = backProgress.value
-                    translationX = progress * size.width * 0.18f
-                    scaleX = 1f - progress * 0.08f
-                    scaleY = 1f - progress * 0.08f
-                    alpha = 1f - progress * 0.15f
-                },
-                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
-                    animationSpec = tween(500)
-                ),
-                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
-                    animationSpec = tween(500)
-                )
-            ) {
-                lastSelectedSplitEventId?.let { eventId ->
-                    SplitEventDetailScreen(
-                        eventId = eventId,
-                        onBack = { selectedSplitEventId = null }
-                    )
-                }
-            }
+                        is DetailPage.SplitEventPage -> SplitEventDetailScreen(
+                            eventId = page.eventId,
+                            onBack = { selectedSplitEventId = null }
+                        )
 
-            AnimatedVisibility(
-                visible = selectedPersonId != null,
-                modifier = Modifier.graphicsLayer {
-                    val progress = backProgress.value
-                    translationX = progress * size.width * 0.18f
-                    scaleX = 1f - progress * 0.08f
-                    scaleY = 1f - progress * 0.08f
-                    alpha = 1f - progress * 0.15f
-                },
-                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
-                    animationSpec = tween(500)
-                ),
-                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
-                    animationSpec = tween(500)
-                )
-            ) {
-                lastSelectedPersonId?.let { personId ->
-                    PersonDetailScreen(
-                        personId = personId,
-                        onBack = { selectedPersonId = null }
-                    )
-                }
-            }
+                        is DetailPage.PersonPage -> PersonDetailScreen(
+                            personId = page.personId,
+                            onBack = { selectedPersonId = null }
+                        )
 
-            AnimatedVisibility(
-                visible = selectedPotId != null,
-                modifier = Modifier.graphicsLayer {
-                    val progress = backProgress.value
-                    translationX = progress * size.width * 0.18f
-                    scaleX = 1f - progress * 0.08f
-                    scaleY = 1f - progress * 0.08f
-                    alpha = 1f - progress * 0.15f
-                },
-                enter = slideInHorizontally(animationSpec = tween(500)) { it } + fadeIn(
-                    animationSpec = tween(500)
-                ),
-                exit = slideOutHorizontally(animationSpec = tween(500)) { it } + fadeOut(
-                    animationSpec = tween(500)
-                )
-            ) {
-                lastSelectedPotId?.let { potId ->
-                    PotDetailScreen(
-                        potId = potId,
-                        onBack = { selectedPotId = null }
-                    )
+                        is DetailPage.PotPage -> PotDetailScreen(
+                            potId = page.potId,
+                            onBack = { selectedPotId = null }
+                        )
+                    }
                 }
             }
         }
@@ -775,4 +730,33 @@ fun RowScope.NavItem(selected: Boolean, icon: ImageVector, label: String, onClic
             )
         }
     }
+}
+
+/** The detail pages that open over the tabs. At most one at a time. */
+private sealed interface DetailPage {
+    data class TransactionPage(val transaction: Transaction) : DetailPage
+    data class SplitEventPage(val eventId: Long) : DetailPage
+    data class PersonPage(val personId: Long) : DetailPage
+    data class PotPage(val potId: Long) : DetailPage
+}
+
+/**
+ * The page push, matched to remiit: the new page slides in from the right edge
+ * while the screen beneath drifts a third of the way left, on an ease-in-out
+ * curve.
+ */
+private object PagePush {
+    /**
+     * Ease-in-out: leaves rest gently, crosses the middle quickly, then
+     * settles rather than stopping dead. An ease-out alone reads as a snap.
+     */
+    private val Easing = CubicBezierEasing(0.65f, 0f, 0.35f, 1f)
+
+    /** Under ~350ms an ease-in-out has no room to show and looks linear. */
+    private const val DURATION_MILLIS = 420
+
+    /** How far the screen beneath drifts: a third, like a stack with depth. */
+    const val PARALLAX_DIVISOR = 3f
+
+    fun spec() = tween<Float>(durationMillis = DURATION_MILLIS, easing = Easing)
 }
