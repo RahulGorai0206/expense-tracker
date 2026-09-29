@@ -22,10 +22,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Restores the Gradle user home (dependencies, wrapper, build cache)
-      # warmed by the cache-warmup workflow on main. Read-only: a cache saved
-      # under refs/tags/vX can never be read by another tag, so writing one
-      # would just burn storage against the repo's 10 GB quota.
+      # Read-only: a cache saved under refs/tags/vX can never be read by
+      # another tag, so writing one would just burn storage against the repo's
+      # 10 GB quota. With no cache published from main, release builds start
+      # cold and resolve dependencies from scratch.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

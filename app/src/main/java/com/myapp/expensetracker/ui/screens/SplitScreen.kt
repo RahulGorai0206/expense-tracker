@@ -1217,16 +1217,20 @@ private fun MemberBalanceCard(balance: MemberBalance, onShare: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SplitCreateDialog(
+internal fun SplitCreateDialog(
     eventId: Long,
     members: List<SplitMember>,
     onDismiss: () -> Unit,
     onAddMember: (String, String?) -> Unit,
-    onSave: (Double, String, Long, SplitMode, List<SplitShareDraft>) -> Unit
+    onSave: (Double, String, Long, SplitMode, List<SplitShareDraft>) -> Unit,
+    // Set when the split is made from a detected transaction, so the amount
+    // arrives filled in and the final button says what will happen to it.
+    initialAmount: Double? = null,
+    saveLabel: String = "Save split"
 ) {
     val context = LocalContext.current
     var step by remember { mutableIntStateOf(0) }
-    var amountText by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf(initialAmount?.let(::formatPlainAmount).orEmpty()) }
     var description by remember { mutableStateOf("") }
     var manualMember by remember { mutableStateOf("") }
     var selectedMemberIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -1422,7 +1426,7 @@ private fun SplitCreateDialog(
                         .height(56.dp),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(if (step == 3) "Save split" else "Next")
+                    Text(if (step == 3) saveLabel else "Next")
                 }
             }
         }

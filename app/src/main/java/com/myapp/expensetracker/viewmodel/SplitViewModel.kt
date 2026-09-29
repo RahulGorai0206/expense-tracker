@@ -91,6 +91,7 @@ class SplitViewModel(private val repository: SplitRepository) : ViewModel() {
         paidByMemberId: Long,
         mode: SplitMode,
         shares: List<SplitShareDraft>,
+        createdAt: Long = System.currentTimeMillis(),
         onSaved: () -> Unit = {}
     ) {
         if (amount <= 0.0 || shares.isEmpty() || !SplitCalculator.isBalanced(
@@ -100,7 +101,9 @@ class SplitViewModel(private val repository: SplitRepository) : ViewModel() {
             )
         ) return
         viewModelScope.launch {
-            repository.saveSplit(eventId, amount, description, paidByMemberId, mode, shares)
+            repository.saveSplit(
+                eventId, amount, description, paidByMemberId, mode, shares, createdAt
+            )
             onSaved()
         }
     }

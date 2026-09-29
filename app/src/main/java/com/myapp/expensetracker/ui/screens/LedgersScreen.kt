@@ -150,7 +150,8 @@ fun LedgersScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LedgerTabRow(
+            LedgerPillRow(
+                labels = LedgerTabs.entries.map { it.label },
                 selected = selectedTab,
                 onSelect = { selectedTab = it }
             )
@@ -228,14 +229,14 @@ fun LedgersScreen(
  * Material in an app that uses rounded, colour-animated controls throughout.
  */
 @Composable
-private fun LedgerTabRow(selected: Int, onSelect: (Int) -> Unit) {
+internal fun LedgerPillRow(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        LedgerTabs.entries.forEachIndexed { index, tab ->
+        labels.forEachIndexed { index, label ->
             val isSelected = selected == index
             val bgColor by animateColorAsState(
                 if (isSelected) {
@@ -269,7 +270,7 @@ private fun LedgerTabRow(selected: Int, onSelect: (Int) -> Unit) {
                     // label from Medium to ExtraBold, which measures wider and
                     // shunted every pill to its right along the row.
                     Text(
-                        text = tab.label,
+                        text = label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier
@@ -279,7 +280,7 @@ private fun LedgerTabRow(selected: Int, onSelect: (Int) -> Unit) {
                             .clearAndSetSemantics { }
                     )
                     Text(
-                        text = tab.label,
+                        text = label,
                         style = MaterialTheme.typography.labelLarge,
                         color = textColor,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium

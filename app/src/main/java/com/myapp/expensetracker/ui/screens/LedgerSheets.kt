@@ -242,10 +242,13 @@ fun AddLoanSheet(
     personName: String,
     pots: List<SavingsPot>,
     onDismiss: () -> Unit,
-    onAdd: (amount: Double, reason: String, fromPotId: Long?) -> Unit
+    onAdd: (amount: Double, reason: String, fromPotId: Long?) -> Unit,
+    // Seeded when recording a detected transaction as a loan.
+    initialAmount: Double? = null,
+    confirmLabel: String = "Record loan"
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var amount by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf(initialAmount?.let(::formatPlainAmount).orEmpty()) }
     var reason by remember { mutableStateOf("") }
     var fromPotId by remember { mutableStateOf<Long?>(null) }
 
@@ -305,7 +308,7 @@ fun AddLoanSheet(
                 },
                 enabled = parsedAmount(amount) != null && reason.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Record loan") }
+            ) { Text(confirmLabel) }
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -383,10 +386,13 @@ fun AddRepaymentSheet(
 fun AddContributionSheet(
     potName: String,
     onDismiss: () -> Unit,
-    onAdd: (amount: Double, note: String) -> Unit
+    onAdd: (amount: Double, note: String) -> Unit,
+    // Seeded when recording a detected credit as a contribution.
+    initialAmount: Double? = null,
+    confirmLabel: String = "Add"
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var amount by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf(initialAmount?.let(::formatPlainAmount).orEmpty()) }
     var note by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -420,15 +426,23 @@ fun AddContributionSheet(
                 onClick = { parsedAmount(amount)?.let { onAdd(it, note) } },
                 enabled = parsedAmount(amount) != null,
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Add") }
+            ) { Text(confirmLabel) }
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
-/** Unformatted, so tapping the "full amount" chip yields a parseable field value. */
-private fun formatPlainAmount(amount: Double): String =
-    if (amount % 1.0 == 0.0) amount.toLong().toString() else "%.2f".format(amount)
+/**
+ * Unformatted, so it can seed an amount field that must still parse. Locale.ROOT
+ * matters: the default locale's "%.2f" writes "12,50" on comma-decimal devices,
+ * which toDoubleOrNull() then rejects, leaving the field unsaveable.
+ */
+internal fun formatPlainAmount(amount: Double): String =
+    if (amount % 1.0 == 0.0) {
+        amount.toLong().toString()
+    } else {
+        String.format(java.util.Locale.ROOT, "%.2f", amount)
+    }
 
 @Composable
 private fun SheetTitle(text: String) {

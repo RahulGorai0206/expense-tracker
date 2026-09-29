@@ -44,7 +44,10 @@ class SplitRepository(private val dao: SplitDao) {
         description: String,
         paidByMemberId: Long,
         mode: SplitMode,
-        shares: List<SplitShareDraft>
+        shares: List<SplitShareDraft>,
+        // Defaults to now for splits typed in by hand; a split made from a
+        // detected transaction passes the transaction's own date instead.
+        createdAt: Long = System.currentTimeMillis()
     ) {
         dao.insertExpenseWithShares(
             expense = SplitExpense(
@@ -52,7 +55,8 @@ class SplitRepository(private val dao: SplitDao) {
                 amount = amount,
                 description = description.trim(),
                 paidByMemberId = paidByMemberId,
-                splitMode = mode.dbValue
+                splitMode = mode.dbValue,
+                createdAt = createdAt
             ),
             shares = shares.map {
                 SplitShare(

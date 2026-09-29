@@ -1,5 +1,6 @@
 package com.myapp.expensetracker.ui.screens
 
+import android.widget.Toast
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -78,6 +79,60 @@ fun TransactionDetailScreen(initialTransaction: Transaction, onBack: () -> Unit)
     val currentTransaction = transaction!!
     var showEditDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showSendToLedger by remember { mutableStateOf(false) }
+
+    /**
+     * Soft-deletes this transaction, closes the screen, then syncs the deletion.
+     * Shared by the delete button and by "Move" to a ledger, so a moved
+     * transaction is removed from Google Sheets exactly as a deleted one is.
+     */
+    fun removeTransaction() {
+        scope.launch {
+            val toDelete = currentTransaction
+            // 1. Mark as deleted locally (Instant UI update)
+            AppDatabase.getDatabase(context).transactionDao()
+                .softDelete(toDelete.id)
+            com.myapp.expensetracker.enqueueWidgetUpdate(context)
+
+            // 2. Close window immediately
+            onBack()
+
+            // 3. Trigger cloud sync in background (doesn't block UI)
+            val deletedTransaction = toDelete.copy(
+                status = "deleted",
+                syncStatus = "pending"
+            )
+            if (com.myapp.expensetracker.GoogleSheetsLogger.isConfigured()) {
+                com.myapp.expensetracker.GoogleSheetsLogger.logAsync(
+                    context,
+                    deletedTransaction,
+                    deletedTransaction.id.toLong()
+                )
+            } else {
+                AppDatabase.getDatabase(context).transactionDao().updateSyncStatus(
+                    deletedTransaction.id,
+                    deletedTransaction.remoteId,
+                    "synced"
+                )
+            }
+        }
+    }
+
+    if (showSendToLedger) {
+        SendToLedgerFlow(
+            transaction = currentTransaction,
+            onDismiss = { showSendToLedger = false },
+            onSent = { mode, destinationName ->
+                showSendToLedger = false
+                Toast.makeText(
+                    context,
+                    "${if (mode == LedgerSendMode.MOVE) "Moved" else "Copied"} to $destinationName",
+                    Toast.LENGTH_SHORT
+                ).show()
+                if (mode == LedgerSendMode.MOVE) removeTransaction()
+            }
+        )
+    }
 
     if (showEditDialog) {
         EditTransactionDialog(
@@ -338,7 +393,34 @@ fun TransactionDetailScreen(initialTransaction: Transaction, onBack: () -> Unit)
             }
             
             Spacer(modifier = Modifier.height(32.dp))
-            
+
+            // Zero-amount rows have no direction, so there's nothing to record.
+            if (currentTransaction.amount != 0.0) {
+                Button(
+                    onClick = { showSendToLedger = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Icon(Icons.Default.AccountBalanceWallet, null)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        if (currentTransaction.amount < 0) {
+                            "Move or copy to Lending / Split"
+                        } else {
+                            "Move or copy to Savings"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = { showEditDialog = true },
@@ -354,37 +436,7 @@ fun TransactionDetailScreen(initialTransaction: Transaction, onBack: () -> Unit)
                 }
                 
                 IconButton(
-                    onClick = {
-                        scope.launch {
-                            val toDelete = currentTransaction
-                            // 1. Mark as deleted locally (Instant UI update)
-                            AppDatabase.getDatabase(context).transactionDao()
-                                .softDelete(toDelete.id)
-                            com.myapp.expensetracker.enqueueWidgetUpdate(context)
-
-                            // 2. Close window immediately
-                            onBack()
-
-                            // 3. Trigger cloud sync in background (doesn't block UI)
-                            val deletedTransaction = toDelete.copy(
-                                status = "deleted",
-                                syncStatus = "pending"
-                            )
-                            if (com.myapp.expensetracker.GoogleSheetsLogger.isConfigured()) {
-                                com.myapp.expensetracker.GoogleSheetsLogger.logAsync(
-                                    context,
-                                    deletedTransaction,
-                                    deletedTransaction.id.toLong()
-                                )
-                            } else {
-                                AppDatabase.getDatabase(context).transactionDao().updateSyncStatus(
-                                    deletedTransaction.id,
-                                    deletedTransaction.remoteId,
-                                    "synced"
-                                )
-                            }
-                        }
-                    },
+                    onClick = { removeTransaction() },
                     modifier = Modifier
                         .size(60.dp)
                         .clip(RoundedCornerShape(20.dp))
