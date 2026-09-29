@@ -30,7 +30,7 @@ import java.util.Locale
         SavingsPot::class,
         PotContribution::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -262,6 +262,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 12 → 13: the app user's identity in splits, and the link
+         * from their share of an expense to the transaction it was booked as.
+         * Both additive; existing members default to "not the app user".
+         */
+        private val migration12to13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE split_members ADD COLUMN isAppUser INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL("ALTER TABLE split_shares ADD COLUMN transactionId INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -274,7 +288,8 @@ abstract class AppDatabase : RoomDatabase() {
                         migration8to9,
                         migration9to10,
                         migration10to11,
-                        migration11to12
+                        migration11to12,
+                        migration12to13
                     )
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

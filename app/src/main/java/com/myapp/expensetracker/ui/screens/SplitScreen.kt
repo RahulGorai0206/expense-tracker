@@ -110,7 +110,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.myapp.expensetracker.AppDatabase
+import com.myapp.expensetracker.AppUserStore
 import com.myapp.expensetracker.MemberBalance
+import com.myapp.expensetracker.SplitShareBooking
 import com.myapp.expensetracker.Settlement
 import com.myapp.expensetracker.SplitCalculator
 import com.myapp.expensetracker.SplitEvent
@@ -125,7 +128,10 @@ import com.myapp.expensetracker.viewmodel.SplitEventState
 import com.myapp.expensetracker.viewmodel.SplitViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -179,6 +185,8 @@ fun SplitEventDetailScreen(eventId: Long, onBack: () -> Unit) {
     val haptics = rememberHaptics()
     var settlementToMarkPaid by remember { mutableStateOf<Settlement?>(null) }
     var hasLoadedEvent by remember(eventId) { mutableStateOf(false) }
+    val appUserStore: AppUserStore = koinInject()
+    val appUserName by viewModel.appUserName.collectAsState()
 
     BackHandler(onBack = onBack)
 
@@ -299,6 +307,16 @@ fun SplitEventDetailScreen(eventId: Long, onBack: () -> Unit) {
                 .padding(padding)
                 .fillMaxSize()
         ) {
+            if (eventState.event != null && eventState.appUser == null) {
+                WhichMemberIsYouBanner(
+                    appUserName = appUserName,
+                    members = eventState.members,
+                    onSetName = { detailScope.launch { appUserStore.setName(it) } },
+                    onPickMember = { viewModel.markAsMe(eventId, it) },
+                    onAddMe = { viewModel.addMeToEvent(eventId) }
+                )
+            }
+
             // SecondaryTabRow, not PrimaryTabRow: the deprecated TabRow defaulted
             // to the full-width secondary indicator, so this keeps the tabs
             // looking exactly as they did.
@@ -529,6 +547,7 @@ private fun SplitListTab(
 
     selectedExpense?.let { expense ->
         SplitExpenseDetailsSheet(
+            eventName = state.event?.name.orEmpty(),
             expense = expense,
             members = state.members,
             shares = state.shares.filter { it.splitExpenseId == expense.id },
@@ -628,13 +647,16 @@ private fun SplitListTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SplitExpenseDetailsSheet(
+    eventName: String,
     expense: SplitExpense,
     members: List<SplitMember>,
     shares: List<SplitShare>,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val payer = members.firstOrNull { it.id == expense.paidByMemberId }?.displayName ?: "Someone"
+    val payerMember = members.firstOrNull { it.id == expense.paidByMemberId }
+    val payer = payerMember?.labelWithYou() ?: "Someone"
+    val myShare = appUserShare(members, shares)
     val dateText = remember(expense.createdAt) {
         SimpleDateFormat(
             "MMMM dd, yyyy - hh:mm a",
@@ -650,7 +672,10 @@ private fun SplitExpenseDetailsSheet(
             modifier = Modifier
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 40.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // The share card made this tall enough to overflow on a small
+                // phone with several members.
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -658,6 +683,15 @@ private fun SplitExpenseDetailsSheet(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
+
+            myShare?.let { share ->
+                YourShareCard(
+                    eventName = eventName,
+                    expense = expense,
+                    share = share,
+                    paidByYou = payerMember?.isAppUser == true
+                )
+            }
 
             SplitDetailSummaryRow("TOTAL", rupee(expense.amount))
             SplitDetailSummaryRow("PAID BY", payer)
@@ -674,7 +708,7 @@ private fun SplitExpenseDetailsSheet(
 
             shares.forEach { share ->
                 val member =
-                    members.firstOrNull { it.id == share.memberId }?.displayName ?: "Member"
+                    members.firstOrNull { it.id == share.memberId }?.labelWithYou() ?: "Member"
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
@@ -750,13 +784,28 @@ private fun SplitExpenseListItem(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val payer = members.firstOrNull { it.id == expense.paidByMemberId }?.displayName ?: "Someone"
+    val payerMember = members.firstOrNull { it.id == expense.paidByMemberId }
+    val payer = when {
+        payerMember == null -> "Someone"
+        payerMember.isAppUser -> "You"
+        else -> payerMember.displayName
+    }
+    val myShare = appUserShare(members, shares)
     SplitTransactionStyleRow(
         icon = Icons.Default.Payments,
         iconColor = MaterialTheme.colorScheme.secondary,
         title = expense.description.ifBlank { "Shared expense" },
         subtitle = "PAID BY ${payer.uppercase()}",
-        chips = listOf(
+        chips = listOfNotNull(
+            // Your part of the bill is the number you actually care about, so
+            // it leads the chips when you're in this expense.
+            myShare?.let {
+                SplitRowChip(
+                    "YOUR SHARE ${rupee(it.owedAmount)}",
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                )
+            },
             SplitRowChip(
                 SplitMode.fromDb(expense.splitMode).label.uppercase(),
                 MaterialTheme.colorScheme.secondary,
@@ -1269,7 +1318,11 @@ internal fun SplitCreateDialog(
         val currentIds = members.map { it.id }.toSet()
         selectedMemberIds =
             if (selectedMemberIds.isEmpty()) currentIds else selectedMemberIds.intersect(currentIds)
-        if (paidByMemberId !in currentIds) paidByMemberId = currentIds.firstOrNull()
+        // You're the likeliest payer — and always are when a transaction of
+        // yours is being moved here — so default to you when you're a member.
+        if (paidByMemberId !in currentIds) {
+            paidByMemberId = members.firstOrNull { it.isAppUser }?.id ?: currentIds.firstOrNull()
+        }
     }
 
     LaunchedEffect(selectedMembers, amount, mode, paidByMemberId) {
@@ -1513,7 +1566,7 @@ private fun SplitMembersStep(
                 InputChip(
                     selected = member.id in selectedIds,
                     onClick = { onToggle(member.id) },
-                    label = { Text(member.displayName) },
+                    label = { Text(member.labelWithYou()) },
                     leadingIcon = if (member.id in selectedIds) {
                         {
                             Icon(
@@ -1559,7 +1612,7 @@ private fun PayerStep(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        member.displayName,
+                        member.labelWithYou(),
                         modifier = Modifier.weight(1f),
                         fontWeight = FontWeight.Bold
                     )
@@ -1650,3 +1703,220 @@ private fun ShareStep(
 
 private fun rupee(amount: Double): String =
     String.format(Locale.getDefault(), "\u20B9%,.2f", amount)
+
+// ── App user ("you") ─────────────────────────────────────────────────────────
+
+private fun SplitMember.labelWithYou(): String =
+    if (isAppUser) "$displayName (you)" else displayName
+
+/** The app user's share of one expense, if they're in it and owe anything. */
+private fun appUserShare(members: List<SplitMember>, shares: List<SplitShare>): SplitShare? {
+    val me = members.firstOrNull { it.isAppUser } ?: return null
+    return shares.firstOrNull { it.memberId == me.id && it.owedAmount > 0.0 }
+}
+
+/**
+ * Your part of one expense, and the button that books it into History as your
+ * own spending. Only the share is booked, never the full bill.
+ */
+@Composable
+private fun YourShareCard(
+    eventName: String,
+    expense: SplitExpense,
+    share: SplitShare,
+    paidByYou: Boolean
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var booking by remember { mutableStateOf(false) }
+
+    // Booked only while the linked transaction still exists: delete it from
+    // History and the share can be added again. Starts from "booked" whenever
+    // a link exists, so a real booking never flashes an "Add" button while
+    // the lookup loads.
+    val isBooked by remember(share.transactionId) {
+        val id = share.transactionId
+        if (id == null) {
+            flowOf(false)
+        } else {
+            AppDatabase.getDatabase(context).transactionDao().getTransactionById(id)
+                .map { it != null && it.status != "deleted" }
+        }
+    }.collectAsState(initial = share.transactionId != null)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "YOUR SHARE",
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
+            Text(
+                rupee(share.owedAmount),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                "of ${rupee(expense.amount)} — this part is your own spending.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+
+            if (isBooked) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Added to your transactions",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            } else {
+                // If you paid the whole bill, that payment is likely already in
+                // History as a debit for the full amount. Adding your share too
+                // would count your part twice.
+                if (paidByYou) {
+                    Text(
+                        "You paid the full bill. If that payment is still in History, " +
+                            "move it to this split first — otherwise your part is counted twice.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Button(
+                    onClick = {
+                        booking = true
+                        scope.launch {
+                            SplitShareBooking.book(context, eventName, expense, share)
+                            booking = false
+                            Toast.makeText(
+                                context,
+                                "Added ${rupee(share.owedAmount)} to your transactions",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    enabled = !booking,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add to my transactions", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Shown on an event that doesn't know which member is you — every event made
+ * before you had a name. With no name set yet, it asks for one right here
+ * rather than sending you off to Settings.
+ */
+@Composable
+private fun WhichMemberIsYouBanner(
+    appUserName: String,
+    members: List<SplitMember>,
+    onSetName: (String) -> Unit,
+    onPickMember: (Long) -> Unit,
+    onAddMe: () -> Unit
+) {
+    var typedName by remember { mutableStateOf("") }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (appUserName.isBlank()) {
+                Text(
+                    "What's your name?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    "Set it once and your share of each expense can be added to your own spending.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = typedName,
+                        onValueChange = { typedName = it },
+                        placeholder = { Text("Your name") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onSetName(typedName) },
+                        enabled = typedName.isNotBlank(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) { Text("Save") }
+                }
+            } else {
+                Text(
+                    "Which one is you?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    "Pick yourself so your share of each expense can be added to your spending.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    members.forEach { member ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { onPickMember(member.id) },
+                            label = { Text(member.displayName) }
+                        )
+                    }
+                    FilterChip(
+                        selected = false,
+                        onClick = onAddMe,
+                        label = { Text("Add me as $appUserName") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+}

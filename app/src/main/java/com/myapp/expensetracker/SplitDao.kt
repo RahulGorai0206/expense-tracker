@@ -79,6 +79,26 @@ interface SplitDao {
     @Query("SELECT * FROM split_events WHERE id = :eventId")
     suspend fun getEvent(eventId: Long): SplitEvent?
 
+    // ── App user ────────────────────────────────────────────────────────────
+
+    /** Keeps the app user's name identical in every event when it changes. */
+    @Query("UPDATE split_members SET displayName = :name WHERE isAppUser = 1")
+    suspend fun renameAppUserMembers(name: String)
+
+    /**
+     * Makes [memberId] the app user for its event and clears the flag from
+     * everyone else there, in one statement, so an event can never end up with
+     * two "you"s.
+     */
+    @Query(
+        "UPDATE split_members SET isAppUser = CASE WHEN id = :memberId THEN 1 ELSE 0 END " +
+            "WHERE eventId = :eventId"
+    )
+    suspend fun markAppUser(eventId: Long, memberId: Long)
+
+    @Query("UPDATE split_shares SET transactionId = :transactionId WHERE id = :shareId")
+    suspend fun linkShareToTransaction(shareId: Long, transactionId: Int?)
+
     @Transaction
     suspend fun insertExpenseWithShares(expense: SplitExpense, shares: List<SplitShare>) {
         val expenseId = insertExpense(expense)

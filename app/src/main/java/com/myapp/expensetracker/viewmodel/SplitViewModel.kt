@@ -29,11 +29,27 @@ data class SplitEventState(
     val payments: List<SplitPayment> = emptyList(),
     val balances: List<MemberBalance> = emptyList(),
     val settlements: List<Settlement> = emptyList()
-)
+) {
+    /** The member who is the person using the app, if this event has one. */
+    val appUser: SplitMember? get() = members.firstOrNull { it.isAppUser }
+}
 
 class SplitViewModel(private val repository: SplitRepository) : ViewModel() {
     val events: StateFlow<List<SplitEvent>> = repository.observeEvents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Blank until set in setup or Settings. */
+    val appUserName: StateFlow<String> = repository.appUserName
+
+    /** Adds the app user to an event created before their name was set. */
+    fun addMeToEvent(eventId: Long) {
+        viewModelScope.launch { repository.addAppUser(eventId) }
+    }
+
+    /** Marks an existing member of the event as the app user. */
+    fun markAsMe(eventId: Long, memberId: Long) {
+        viewModelScope.launch { repository.markAppUser(eventId, memberId) }
+    }
 
     fun eventState(eventId: Long): Flow<SplitEventState> {
         return combine(

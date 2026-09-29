@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,6 +86,8 @@ import com.myapp.expensetracker.ui.components.PrivacyPolicyDialog
 import com.myapp.expensetracker.ui.components.rememberBackupController
 import com.myapp.expensetracker.viewmodel.HomeViewModel
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
+import com.myapp.expensetracker.AppUserStore
 
 @Composable
 fun SettingsItem(
@@ -290,6 +293,9 @@ fun SettingsScreen(
     val smartSuggestions by viewModel.smartSuggestions.collectAsState()
 
     val haptics = rememberHaptics()
+    val appUser: AppUserStore = koinInject()
+    val appUserName by appUser.name.collectAsState()
+    var showNameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showBudgetEdit by remember { mutableStateOf(false) }
@@ -494,6 +500,19 @@ fun SettingsScreen(
                 Button(onClick = { backupMessage = null }) { Text("OK") }
             },
             shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    if (showNameDialog) {
+        EditAppUserNameDialog(
+            currentName = appUserName,
+            onDismiss = { showNameDialog = false },
+            onSave = { newName ->
+                // Renames you in every split event too, so "you" reads the
+                // same everywhere; backed up by the preference listener.
+                scope.launch { appUser.setName(newName) }
+                showNameDialog = false
+            }
         )
     }
 
@@ -935,6 +954,26 @@ fun SettingsScreen(
         // --- QUICK ACTIONS ---
         item {
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // --- PROFILE ---
+        item {
+            SettingsCategory("PROFILE") {
+                SettingsItem(
+                    title = "Your name",
+                    subtitle = appUserName.ifBlank { "Not set — you'll appear as this in splits" },
+                    icon = Icons.Default.Person,
+                    onClick = { showNameDialog = true },
+                    trailing = {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit name",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                )
+            }
         }
 
         // --- BUDGETING ---
@@ -1816,4 +1855,46 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+/** Edits the app user's name — the "you" in every split. */
+@Composable
+private fun EditAppUserNameDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var name by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Your name", fontWeight = FontWeight.Black) },
+        text = {
+            Column {
+                Text(
+                    "You appear under this name in every split. Changing it renames you in existing splits too.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
+        },
+        confirmButton = {
+            // A blank name would orphan "you" in existing splits, so it can't
+            // be saved — only changed.
+            Button(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        shape = RoundedCornerShape(28.dp)
+    )
 }

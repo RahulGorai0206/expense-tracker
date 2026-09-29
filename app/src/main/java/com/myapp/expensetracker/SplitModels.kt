@@ -32,7 +32,13 @@ data class SplitMember(
     val eventId: Long,
     val displayName: String,
     val contactLookupKey: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /**
+     * True for the member who is the person using this app. At most one per
+     * event. Their share of each expense is their own spending, which is what
+     * lets it be booked into the transaction history.
+     */
+    val isAppUser: Boolean = false
 )
 
 @Entity(
@@ -76,7 +82,14 @@ data class SplitShare(
     val splitExpenseId: Long,
     val memberId: Long,
     val owedAmount: Double,
-    val percentage: Double
+    val percentage: Double,
+    /**
+     * The transaction this share was booked as, if the app user added their
+     * share to History. Only ever set on the app user's share. Checked against
+     * the transaction's current status rather than trusted outright, so a share
+     * whose transaction was later deleted can be booked again.
+     */
+    val transactionId: Int? = null
 )
 
 @Entity(

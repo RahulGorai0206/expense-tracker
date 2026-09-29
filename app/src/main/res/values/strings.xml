@@ -53,6 +53,10 @@
     <string name="setup_background_description">To ensure no transaction is missed, Expense Tracker needs to run its monitoring service in the background.</string>
     <string name="setup_background_reasoning">Why is this needed?\nAndroid may stop the app if not allowed in background, which would stop automatic tracking. We also recommend disabling battery optimization for Expense Tracker.</string>
 
+    <string name="setup_name_title">What should we call you?</string>
+    <string name="setup_name_description">You\'ll appear under this name in every split, so your share of a shared bill can be counted as your own spending. You can change it later in Settings.</string>
+    <string name="setup_name_label">Your name</string>
+    <string name="setup_name_error">Please enter your name</string>
     <string name="setup_budget_title">Set Your Budget</string>
     <string name="setup_budget_description">How much do you plan to spend this month?</string>
     <string name="setup_budget_label">Monthly Budget</string>

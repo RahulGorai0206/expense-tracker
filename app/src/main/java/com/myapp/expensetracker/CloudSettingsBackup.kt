@@ -26,7 +26,8 @@ data class CloudSettingsBackup(
     val sheet_url: String? = null,
     val script_url: String? = null,
     val api_key: String? = null,
-    val saved_tags: List<String>? = null
+    val saved_tags: List<String>? = null,
+    val app_user_name: String? = null
 )
 
 object CloudSettingsBackupManager {
@@ -40,7 +41,8 @@ object CloudSettingsBackupManager {
         "follow_system_theme",
         "dark_theme",
         "cloud_sync",
-        "saved_tags"
+        "saved_tags",
+        AppUserStore.PREF_KEY
     )
 
     fun backupAsync(context: Context) {
@@ -71,7 +73,9 @@ object CloudSettingsBackupManager {
             sheet_url = prefs.getString("sheet_url", ""),
             script_url = prefs.getString("script_url", ""),
             api_key = prefs.getString("api_key", ""),
-            saved_tags = getSavedTags(context)
+            saved_tags = getSavedTags(context),
+            app_user_name = prefs.getString(AppUserStore.PREF_KEY, "")
+                ?.takeIf { it.isNotBlank() }
         )
     }
 
@@ -124,6 +128,11 @@ object CloudSettingsBackupManager {
             backup.saved_tags?.let {
                 android.util.Log.d("CloudBackup", "Setting saved_tags: $it")
                 putStringSet("saved_tags", it.toSortedSet())
+            }
+            // Blank is skipped: an older backup or a device that never set a
+            // name must not wipe one that's been set here.
+            backup.app_user_name?.takeIf { it.isNotBlank() }?.let {
+                putString(AppUserStore.PREF_KEY, it.trim())
             }
         }
 

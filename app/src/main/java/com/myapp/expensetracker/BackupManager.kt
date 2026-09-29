@@ -86,7 +86,9 @@ data class SplitMemberBackup(
     val localId: Long? = null,
     val displayName: String? = null,
     val contactLookupKey: String? = null,
-    val createdAt: Long? = null
+    val createdAt: Long? = null,
+    /** Null in backups made before the app user existed; treated as false. */
+    val isAppUser: Boolean? = null
 )
 
 data class SplitExpenseBackup(
@@ -101,7 +103,13 @@ data class SplitExpenseBackup(
 data class SplitShareBackup(
     val memberLocalId: Long? = null,
     val owedAmount: Double? = null,
-    val percentage: Double? = null
+    val percentage: Double? = null,
+    /**
+     * The booked transaction's dedup key, not its id: ids are reassigned on
+     * import, but the key is rebuilt identically from the restored row, so the
+     * share can be re-linked and isn't offered for booking a second time.
+     */
+    val linkedTransactionKey: String? = null
 )
 
 data class SplitPaymentBackup(
@@ -211,6 +219,11 @@ object BackupManager {
         withContext(Dispatchers.IO) {
             val db = AppDatabase.getDatabase(context)
             val transactions = db.transactionDao().getAllTransactionsList()
+            // Only live transactions: a share whose booking was deleted should
+            // restore as unbooked, exactly as it reads now.
+            val liveTransactionKeys = transactions
+                .filter { it.status != "deleted" }
+                .associate { it.id to it.dedupKey() }
             val splitEvents = db.splitDao().getAllEvents().map { event ->
                 val members = db.splitDao().getMembersForEvent(event.id)
                 val expenses = db.splitDao().getExpensesForEvent(event.id).map { expense ->
@@ -224,7 +237,10 @@ object BackupManager {
                             SplitShareBackup(
                                 memberLocalId = share.memberId,
                                 owedAmount = share.owedAmount,
-                                percentage = share.percentage
+                                percentage = share.percentage,
+                                linkedTransactionKey = share.transactionId?.let {
+                                    liveTransactionKeys[it]
+                                }
                             )
                         }
                     )
@@ -238,7 +254,8 @@ object BackupManager {
                             localId = member.id,
                             displayName = member.displayName,
                             contactLookupKey = member.contactLookupKey,
-                            createdAt = member.createdAt
+                            createdAt = member.createdAt,
+                            isAppUser = member.isAppUser
                         )
                     },
                     expenses = expenses,
@@ -411,6 +428,12 @@ object BackupManager {
                 transactionsAdded++
             }
 
+            // Transactions are restored above, so a booked share's transaction
+            // already exists here and can be found again by its dedup key.
+            val restoredTransactionIds = db.transactionDao().getAllTransactionsList()
+                .filter { it.status != "deleted" }
+                .associate { it.dedupKey() to it.id }
+
             // ── Splits ──────────────────────────────────────────────────────
             val existingEventKeys = db.splitDao().getAllEvents()
                 .map { it.dedupKey() }
@@ -446,7 +469,8 @@ object BackupManager {
                             eventId = newEventId,
                             displayName = displayName,
                             contactLookupKey = memberDto.contactLookupKey,
-                            createdAt = memberDto.createdAt ?: createdAt
+                            createdAt = memberDto.createdAt ?: createdAt,
+                            isAppUser = memberDto.isAppUser == true
                         )
                     )
                     memberDto.localId?.let { memberIdMap[it] = newMemberId }
@@ -471,7 +495,10 @@ object BackupManager {
                             splitExpenseId = newExpenseId,
                             memberId = memberId,
                             owedAmount = shareDto.owedAmount ?: 0.0,
-                            percentage = shareDto.percentage ?: 0.0
+                            percentage = shareDto.percentage ?: 0.0,
+                            transactionId = shareDto.linkedTransactionKey?.let {
+                                restoredTransactionIds[it]
+                            }
                         )
                     }
                     if (shares.isNotEmpty()) db.splitDao().insertShares(shares)

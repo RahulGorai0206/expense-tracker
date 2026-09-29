@@ -1,6 +1,7 @@
 package com.myapp.expensetracker.di
 
 import com.myapp.expensetracker.AppDatabase
+import com.myapp.expensetracker.AppUserStore
 import com.myapp.expensetracker.LedgerRepository
 import com.myapp.expensetracker.SplitRepository
 import com.myapp.expensetracker.viewmodel.AnalyticsViewModel
@@ -19,7 +20,8 @@ val appModule = module {
     single { get<AppDatabase>().splitDao() }
     single { get<AppDatabase>().pendingTransactionDao() }
     single { get<AppDatabase>().ledgerDao() }
-    single { SplitRepository(get()) }
+    single { AppUserStore(androidContext(), get()) }
+    single { SplitRepository(get(), get()) }
     single { LedgerRepository(get()) }
 
     viewModel { HomeViewModel(get(), get()) }

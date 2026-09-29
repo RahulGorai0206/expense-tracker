@@ -52,7 +52,10 @@ import com.myapp.expensetracker.ui.components.SetupCelebration
 import com.myapp.expensetracker.ui.components.rememberBackupController
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import com.myapp.expensetracker.AppUserStore
+import org.koin.compose.koinInject
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
@@ -70,7 +73,11 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sharedPrefs = remember { context.getSharedPreferences("prefs", Context.MODE_PRIVATE) }
-    
+    val appUser: AppUserStore = koinInject()
+
+    // Seeded from any name already saved, e.g. by an abandoned earlier run.
+    var userName by remember { mutableStateOf(appUser.name.value) }
+    var showNameError by remember { mutableStateOf(false) }
     var budgetText by remember { mutableStateOf("") }
     var isCloudSyncEnabled by remember { mutableStateOf(false) }
     var sheetUrl by remember { mutableStateOf("") }
@@ -156,9 +163,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
         }
     }
 
-    // Total steps: Welcome(0), Privacy(1), SMS(2), NotifAccess(3), Location(4),
-    // Notifications(5), Background(6), Budget(7), Import(8), Cloud(9)
-    val totalSteps = 10
+    val totalSteps = SetupStep.COUNT
 
     // Permission States
     var hasSmsPermission by remember { mutableStateOf(false) }
@@ -260,9 +265,17 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                 modifier = Modifier.weight(1f)
             ) { step ->
                 when (step) {
-                    0 -> WelcomeStep()
-                    1 -> PrivacyStep()
-                    2 -> PermissionStep(
+                    SetupStep.WELCOME -> WelcomeStep()
+                    SetupStep.NAME -> NameStep(
+                        value = userName,
+                        isError = showNameError && userName.isBlank(),
+                        onValueChange = {
+                            userName = it
+                            if (it.isNotBlank()) showNameError = false
+                        }
+                    )
+                    SetupStep.PRIVACY -> PrivacyStep()
+                    SetupStep.SMS -> PermissionStep(
                         icon = Icons.Default.Sms,
                         title = stringResource(R.string.setup_sms_title),
                         description = stringResource(R.string.setup_sms_description),
@@ -282,7 +295,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                             )
                         }
                     )
-                    3 -> PermissionStep(
+                    SetupStep.NOTIFICATION_ACCESS -> PermissionStep(
                         icon = Icons.Default.MarkChatUnread,
                         title = stringResource(R.string.setup_notification_access_title),
                         description = stringResource(R.string.setup_notification_access_description),
@@ -299,7 +312,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                         }
                     )
 
-                    4 -> PermissionStep(
+                    SetupStep.LOCATION -> PermissionStep(
                         icon = Icons.Default.LocationOn,
                         title = stringResource(R.string.setup_location_title),
                         description = stringResource(R.string.setup_location_description),
@@ -320,7 +333,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                         }
                     )
 
-                    5 -> PermissionStep(
+                    SetupStep.NOTIFICATIONS -> PermissionStep(
                         icon = Icons.Default.Notifications,
                         title = stringResource(R.string.setup_notification_title),
                         description = stringResource(R.string.setup_notification_description),
@@ -338,7 +351,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                         }
                     )
 
-                    6 -> PermissionStep(
+                    SetupStep.BACKGROUND -> PermissionStep(
                         icon = Icons.Default.RunningWithErrors,
                         title = stringResource(R.string.setup_background_title),
                         description = stringResource(R.string.setup_background_description),
@@ -368,7 +381,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                         }
                     )
 
-                    7 -> BudgetStep(
+                    SetupStep.BUDGET -> BudgetStep(
                         value = budgetText,
                         isError = showError && budgetText.isEmpty(),
                         onValueChange = { 
@@ -377,11 +390,11 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                         }
                     )
 
-                    8 -> ImportStep(
+                    SetupStep.IMPORT -> ImportStep(
                         onChooseFile = { backupController.startImport() }
                     )
 
-                    9 -> CloudSyncStep(
+                    SetupStep.CLOUD -> CloudSyncStep(
                         isEnabled = isCloudSyncEnabled,
                         onToggle = { isCloudSyncEnabled = it },
                         sheetUrl = sheetUrl,
@@ -442,22 +455,30 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                     onClick = {
                         if (isTestingConnection) return@Button
                         when (currentStep) {
-                            0 -> currentStep = 1
-                            1 -> currentStep = 2
-                            2, 3, 4, 5, 6 -> currentStep++
-                            7 -> {
+                            SetupStep.NAME -> {
+                                if (userName.isBlank()) {
+                                    showNameError = true
+                                } else {
+                                    showNameError = false
+                                    // Saved now, not at the end: the import step
+                                    // comes later, and a restored backup's name
+                                    // should win over one typed here — the same
+                                    // rule the budget follows.
+                                    scope.launch { appUser.setName(userName) }
+                                    currentStep++
+                                }
+                            }
+
+                            SetupStep.BUDGET -> {
                                 if (budgetText.isEmpty()) {
                                     showError = true
                                 } else {
                                     showError = false
-                                    currentStep = 8
-                            }
+                                    currentStep++
+                                }
                             }
 
-                            // Import is optional — Continue simply moves on.
-                            8 -> currentStep = 9
-
-                            9 -> {
+                            SetupStep.CLOUD -> {
                                 if (isCloudSyncEnabled) {
                                     if (scriptUrl.isBlank() || apiKey.isBlank()) {
                                         Toast.makeText(
@@ -558,6 +579,10 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                                     onSetupComplete()
                                 }
                             }
+
+                            // Welcome, privacy, permissions and the optional
+                            // import step all just move on.
+                            else -> currentStep++
                         }
                     },
                     modifier = Modifier
@@ -596,7 +621,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                             ) {
                                 Text(
                                     text = when (currentStep) {
-                                        0 -> stringResource(R.string.setup_get_started)
+                                        SetupStep.WELCOME -> stringResource(R.string.setup_get_started)
                                         totalSteps - 1 -> stringResource(R.string.setup_finish)
                                         else -> stringResource(R.string.setup_continue)
                                     },
@@ -646,7 +671,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                     // Backup had no cloud credentials — carry on to the cloud step.
                     if (importedWithoutCloud) {
                         importedWithoutCloud = false
-                        currentStep = 9
+                        currentStep = SetupStep.CLOUD
                     }
                 }) {
                     Text(if (importedWithoutCloud) "Set up cloud sync" else "OK")
@@ -1010,6 +1035,68 @@ fun PermissionStep(
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
+    }
+}
+
+/**
+ * Setup step order. Named rather than numbered because the Continue logic, the
+ * step content and the post-import redirect all refer to steps by position;
+ * with bare integers, inserting one step meant renumbering every later one by
+ * hand in three separate places.
+ */
+private object SetupStep {
+    const val WELCOME = 0
+    const val NAME = 1
+    const val PRIVACY = 2
+    const val SMS = 3
+    const val NOTIFICATION_ACCESS = 4
+    const val LOCATION = 5
+    const val NOTIFICATIONS = 6
+    const val BACKGROUND = 7
+    const val BUDGET = 8
+    const val IMPORT = 9
+    const val CLOUD = 10
+    const val COUNT = 11
+}
+
+@Composable
+fun NameStep(value: String, isError: Boolean, onValueChange: (String) -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            stringResource(R.string.setup_name_title),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            stringResource(R.string.setup_name_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(48.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(stringResource(R.string.setup_name_label)) },
+            isError = isError,
+            supportingText = {
+                if (isError) {
+                    Text(stringResource(R.string.setup_name_error), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            textStyle = LocalTextStyle.current.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        )
     }
 }
 
